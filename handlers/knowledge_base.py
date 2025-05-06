@@ -1,7 +1,7 @@
 
 from aiogram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ContextTypes
-from telegram.constants import ParseMode
+from aiogram.ext import ContextTypes
+from aiogram.constants import ParseMode
 
 import firebase_db
 from utils.keyboards import get_categories_keyboard, get_products_keyboard, get_product_navigation_keyboard
