@@ -1,7 +1,7 @@
 
 from aiogram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ContextTypes
-from telegram.constants import ParseMode
+from aiogram.ext import ContextTypes
+from aiogram.constants import ParseMode
 
 import firebase_db
 from config import ADMIN_IDS
