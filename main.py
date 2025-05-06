@@ -3,8 +3,8 @@ import logging
 import os
 import sys
 from aiogram import Update, Bot
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from telegram.constants import ParseMode
+from aiogram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from aiogram.constants import ParseMode
 
 # Импортируем настройки
 from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH
