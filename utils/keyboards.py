@@ -1,5 +1,5 @@
 
-from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from typing import List, Dict, Any
 
 def get_main_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
