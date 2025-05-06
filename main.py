@@ -2,7 +2,7 @@
 import logging
 import os
 import sys
-from telegram import Update, Bot
+from aiogram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 
