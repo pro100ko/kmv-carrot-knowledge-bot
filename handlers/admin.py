@@ -1,5 +1,5 @@
 
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
