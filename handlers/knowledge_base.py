@@ -1,7 +1,6 @@
 
-from aiogram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.ext import ContextTypes
-from aiogram.constants import ParseMode
+from aiogram import types
+from aiogram.enums import ParseMode
 
 import firebase_db
 from utils.keyboards import get_categories_keyboard, get_products_keyboard, get_product_navigation_keyboard
@@ -9,31 +8,29 @@ from utils.keyboards import get_categories_keyboard, get_products_keyboard, get_
 # Глобальный словарь для отслеживания индекса текущего изображения продукта
 product_image_indices = {}
 
-async def knowledge_base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def knowledge_base_handler(update: types.Message | types.CallbackQuery, context=None) -> None:
     """Обработчик для базы знаний"""
-    # Определяем, пришел запрос из inline кнопки или обычного сообщения
-    query = update.callback_query
-    
     # Получаем категории из Firebase
     categories = firebase_db.get_categories()
     
-    if query:
+    if isinstance(update, types.CallbackQuery):
         # Отправляем сообщение с категориями
+        query = update
         await query.answer()
-        await query.edit_message_text(
+        await query.message.edit_text(
             text="Выберите категорию товаров:",
             reply_markup=get_categories_keyboard(categories)
         )
     else:
         # Если это обычное сообщение, отправляем новое
-        await update.message.reply_text(
+        await update.answer(
             text="Выберите категорию товаров:",
             reply_markup=get_categories_keyboard(categories)
         )
 
-async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def category_handler(update: types.CallbackQuery, context=None) -> None:
     """Обработчик для выбора категории"""
-    query = update.callback_query
+    query = update
     await query.answer()
     
     # Получаем ID категории из callback_data
@@ -50,22 +47,22 @@ async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         
         category_name = selected_category['name'] if selected_category else "Категория"
         
-        await query.edit_message_text(
+        await query.message.edit_text(
             text=f"Товары в категории \"{category_name}\":",
             reply_markup=get_products_keyboard(products, category_id)
         )
     else:
         # Если продуктов нет, сообщаем об этом
-        await query.edit_message_text(
+        await query.message.edit_text(
             text="В этой категории пока нет товаров.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Назад к категориям", callback_data="knowledge_base")]
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text="🔙 Назад к категориям", callback_data="knowledge_base")]
             ])
         )
 
-async def product_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def product_handler(update: types.CallbackQuery, context=None) -> None:
     """Обработчик для просмотра продукта"""
-    query = update.callback_query
+    query = update
     await query.answer()
     
     # Проверяем, это запрос на просмотр продукта или навигация между фото
@@ -77,10 +74,10 @@ async def product_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     product = firebase_db.get_product(product_id)
     
     if not product:
-        await query.edit_message_text(
+        await query.message.edit_text(
             text="Товар не найден.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Назад к категориям", callback_data="knowledge_base")]
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text="🔙 Назад к категориям", callback_data="knowledge_base")]
             ])
         )
         return
@@ -117,80 +114,65 @@ async def product_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if product.get('image_urls') and len(product['image_urls']) > 1:
         product_info += f"\nФото {current_index + 1}/{len(product['image_urls'])}"
     
-    # Отправляем фото с подписью, если оно есть
+    # Создаем клавиатуру для навигации
+    keyboard = get_product_navigation_keyboard(product_id, product['category_id'])
+    
+    # Отправляем информацию о продукте
+    await query.message.edit_text(
+        text=product_info,
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard
+    )
+    
+    # Отправляем фото, если оно есть
     if product.get('image_urls') and len(product['image_urls']) > 0:
         # Получаем URL текущего изображения
         image_url = product['image_urls'][current_index]
         
-        # Создаем клавиатуру для навигации
-        keyboard = get_product_navigation_keyboard(product_id, product['category_id'])
-        
-        # Отправляем фото
-        await query.edit_message_text(
-            text=product_info,
-            parse_mode=ParseMode.HTML,
-            reply_markup=keyboard
-        )
-        
         try:
             # Пытаемся отправить изображение
-            await context.bot.send_photo(
-                chat_id=update.effective_chat.id,
+            await query.message.answer_photo(
                 photo=image_url,
                 reply_markup=keyboard
             )
         except Exception as e:
             # Если не удалось отправить изображение, сообщаем об ошибке
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
+            await query.message.answer(
                 text=f"Не удалось загрузить изображение: {str(e)}",
                 reply_markup=keyboard
             )
-    else:
-        # Если изображений нет, отправляем только текст
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 К списку товаров", callback_data=f"back_to_products:{product['category_id']}")]
-        ])
-        
-        await query.edit_message_text(
-            text=product_info,
-            parse_mode=ParseMode.HTML,
-            reply_markup=keyboard
-        )
     
     # Если есть видео, отправляем его в отдельном сообщении
     if product.get('video_url'):
         try:
-            await context.bot.send_video(
-                chat_id=update.effective_chat.id,
+            await query.message.answer_video(
                 video=product['video_url'],
                 caption="Видео о товаре"
             )
         except Exception as e:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
+            await query.message.answer(
                 text=f"Не удалось загрузить видео: {str(e)}"
             )
 
-async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def search_handler(update: types.Message, context=None) -> None:
     """Обработчик для поиска товаров"""
     from config import MIN_SEARCH_LENGTH, MAX_SEARCH_RESULTS
     
     # Проверяем, это запрос на начало поиска или уже поисковый запрос
-    if update.message.text == "🔍 Поиск":
+    if update.text == "🔍 Поиск":
         # Запрашиваем поисковый запрос
-        await update.message.reply_text(
+        await update.answer(
             "Введите название товара для поиска (минимум 3 символа).\n"
             "Формат: 🔍 Название товара"
         )
         return
     
     # Извлекаем поисковый запрос
-    query_text = update.message.text[2:].strip()  # Убираем символ 🔍 и пробелы
+    query_text = update.text[2:].strip()  # Убираем символ 🔍 и пробелы
     
     # Проверяем длину запроса
     if len(query_text) < MIN_SEARCH_LENGTH:
-        await update.message.reply_text(
+        await update.answer(
             f"Поисковый запрос должен содержать минимум {MIN_SEARCH_LENGTH} символа.\n"
             "Попробуйте снова. Формат: 🔍 Название товара"
         )
@@ -207,23 +189,23 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         buttons = []
         for product in products:
             buttons.append([
-                InlineKeyboardButton(product['name'], callback_data=f"product:{product['id']}")
+                types.InlineKeyboardButton(text=product['name'], callback_data=f"product:{product['id']}")
             ])
         
         # Добавляем кнопку возврата
         buttons.append([
-            InlineKeyboardButton("🔙 К категориям", callback_data="knowledge_base")
+            types.InlineKeyboardButton(text="🔙 К категориям", callback_data="knowledge_base")
         ])
         
-        await update.message.reply_text(
+        await update.answer(
             f"Результаты поиска по запросу \"{query_text}\":",
-            reply_markup=InlineKeyboardMarkup(buttons)
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=buttons)
         )
     else:
         # Если ничего не найдено
-        await update.message.reply_text(
+        await update.answer(
             f"По запросу \"{query_text}\" ничего не найдено.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 К категориям", callback_data="knowledge_base")]
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text="🔙 К категориям", callback_data="knowledge_base")]
             ])
         )

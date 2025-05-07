@@ -2,9 +2,12 @@
 import logging
 import os
 import sys
-from aiogram import Update, Bot
-from aiogram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from aiogram.constants import ParseMode
+from aiogram import Bot, Dispatcher, types
+from aiogram.enums import ParseMode
+from aiogram.filters import CommandStart, Command, Text
+from aiogram.utils.webhook import configure_app, SimpleRequestHandler
+import asyncio
+from aiohttp import web
 
 # Импортируем настройки
 from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH
@@ -23,53 +26,121 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def main() -> None:
+# Инициализация бота и диспетчера
+bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+dp = Dispatcher()
+
+# Регистрируем обработчики
+@dp.message(CommandStart())
+@dp.message(Command("help"))
+async def start_command(message: types.Message):
+    await start(message, None)
+
+# Колбэки для базы знаний
+@dp.callback_query(Text(text="knowledge_base"))
+async def kb_callback(callback_query: types.CallbackQuery):
+    await knowledge_base_handler(callback_query, None)
+
+@dp.callback_query(lambda c: c.data.startswith("category:"))
+async def cat_callback(callback_query: types.CallbackQuery):
+    await category_handler(callback_query, None)
+
+@dp.callback_query(lambda c: c.data.startswith("product:"))
+async def prod_callback(callback_query: types.CallbackQuery):
+    await product_handler(callback_query, None)
+
+# Колбэки для тестирования
+@dp.callback_query(Text(text="testing"))
+async def testing_callback(callback_query: types.CallbackQuery):
+    await testing_handler(callback_query, None)
+
+@dp.callback_query(lambda c: c.data.startswith("test_select:"))
+async def test_select_callback(callback_query: types.CallbackQuery):
+    await test_selection_handler(callback_query, None)
+
+@dp.callback_query(lambda c: c.data.startswith("test_answer:"))
+async def test_answer_callback(callback_query: types.CallbackQuery):
+    await test_question_handler(callback_query, None)
+
+@dp.callback_query(lambda c: c.data.startswith("test_result:"))
+async def test_result_callback(callback_query: types.CallbackQuery):
+    await test_result_handler(callback_query, None)
+
+# Колбэки для админки
+@dp.callback_query(Text(text="admin"))
+async def admin_callback(callback_query: types.CallbackQuery):
+    await admin_handler(callback_query, None)
+
+@dp.callback_query(lambda c: c.data.startswith("admin_categories"))
+async def admin_cat_callback(callback_query: types.CallbackQuery):
+    await admin_categories_handler(callback_query, None)
+
+@dp.callback_query(lambda c: c.data.startswith("admin_products"))
+async def admin_prod_callback(callback_query: types.CallbackQuery):
+    await admin_products_handler(callback_query, None)
+
+@dp.callback_query(lambda c: c.data.startswith("admin_tests"))
+async def admin_test_callback(callback_query: types.CallbackQuery):
+    await admin_tests_handler(callback_query, None)
+
+@dp.callback_query(lambda c: c.data.startswith("admin_stats"))
+async def admin_stats_callback(callback_query: types.CallbackQuery):
+    await admin_stats_handler(callback_query, None)
+
+# Обработчики для текстовых сообщений
+@dp.message(lambda message: message.text == "🔍 Поиск")
+async def search_command(message: types.Message):
+    await search_handler(message, None)
+
+@dp.message(lambda message: message.text and message.text.startswith("🔍 "))
+async def search_query_command(message: types.Message):
+    await search_handler(message, None)
+
+# Обработчик для прочих сообщений
+@dp.message()
+async def any_message(message: types.Message):
+    await register_user_handler(message, None)
+
+async def on_startup(bot: Bot) -> None:
+    """Действия при запуске бота"""
+    # Устанавливаем вебхук
+    await bot.set_webhook(url=WEBHOOK_URL)
+    logger.info(f"Webhook установлен на {WEBHOOK_URL}")
+
+async def on_shutdown(bot: Bot) -> None:
+    """Действия при выключении бота"""
+    # Удаляем вебхук
+    await bot.delete_webhook()
+    logger.info("Webhook удалён")
+
+async def main() -> None:
     """Запуск бота"""
-    # Создаем объект приложения
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    # Регистрируем обработчики
-    # Обработчики для команд
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", start))
-    
-    # Регистрируем обработчики кнопок
-    application.add_handler(CallbackQueryHandler(knowledge_base_handler, pattern="^knowledge_base$"))
-    application.add_handler(CallbackQueryHandler(category_handler, pattern="^category:"))
-    application.add_handler(CallbackQueryHandler(product_handler, pattern="^product:"))
-    
-    application.add_handler(CallbackQueryHandler(testing_handler, pattern="^testing$"))
-    application.add_handler(CallbackQueryHandler(test_selection_handler, pattern="^test_select:"))
-    application.add_handler(CallbackQueryHandler(test_question_handler, pattern="^test_answer:"))
-    application.add_handler(CallbackQueryHandler(test_result_handler, pattern="^test_result:"))
-    
-    application.add_handler(CallbackQueryHandler(admin_handler, pattern="^admin$"))
-    application.add_handler(CallbackQueryHandler(admin_categories_handler, pattern="^admin_categories"))
-    application.add_handler(CallbackQueryHandler(admin_products_handler, pattern="^admin_products"))
-    application.add_handler(CallbackQueryHandler(admin_tests_handler, pattern="^admin_tests"))
-    application.add_handler(CallbackQueryHandler(admin_stats_handler, pattern="^admin_stats"))
-    
-    # Обработчик для поиска
-    application.add_handler(MessageHandler(filters.Regex(r'^\🔍 Поиск$'), search_handler))
-    application.add_handler(MessageHandler(filters.Regex(r'^\🔍 .*'), search_handler))
-    
-    # Обработчик для всех остальных сообщений
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, register_user_handler))
-    
-    # Запускаем бота
     if os.environ.get("ENVIRONMENT") == "production":
-        # На продакшн-сервере используем webhook
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=int(os.environ.get("PORT", 8443)),
-            url_path=WEBHOOK_PATH,
-            webhook_url=WEBHOOK_URL
-        )
-        logger.info(f"Webhook установлен на {WEBHOOK_URL}")
+        # В режиме production используем webhook
+        # Создаем приложение aiohttp
+        app = web.Application()
+        
+        # Настраиваем вебхук
+        SimpleRequestHandler(
+            dispatcher=dp,
+            bot=bot,
+        ).register(app, path=WEBHOOK_PATH)
+        
+        # Дополнительные обработчики маршрутов
+        app.on_startup.append(lambda app: on_startup(bot))
+        app.on_shutdown.append(lambda app: on_shutdown(bot))
+        
+        # Запускаем веб-приложение
+        port = int(os.environ.get("PORT", 8443))
+        logger.info(f"Запуск webhook на порту {port}")
+        web.run_app(app, host="0.0.0.0", port=port)
     else:
-        # Локально используем polling
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        # В режиме разработки используем polling
+        await dp.start_polling(bot, on_startup=on_startup, on_shutdown=on_shutdown)
         logger.info("Бот запущен в режиме polling")
-    
+
 if __name__ == '__main__':
-    main()
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Бот остановлен")

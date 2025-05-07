@@ -1,15 +1,19 @@
 
-from aiogram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.ext import ContextTypes
-from aiogram.constants import ParseMode
+from aiogram import types
+from aiogram.enums import ParseMode
 
 import firebase_db
 from config import ADMIN_IDS
 from utils.keyboards import get_main_keyboard
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start(update: types.Message | types.CallbackQuery, context=None) -> None:
     """Обработчик команды /start"""
-    user = update.effective_user
+    if isinstance(update, types.CallbackQuery):
+        user = update.from_user
+        chat_id = update.message.chat.id
+    else:
+        user = update.from_user
+        chat_id = update.chat.id
     
     # Регистрируем пользователя
     user_data = {
@@ -33,14 +37,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = get_main_keyboard(is_admin)
     
     # Отправляем сообщение с клавиатурой
-    await update.message.reply_text(
-        welcome_message,
-        reply_markup=keyboard
-    )
+    if isinstance(update, types.CallbackQuery):
+        await update.message.answer(welcome_message, reply_markup=keyboard)
+    else:
+        await update.answer(welcome_message, reply_markup=keyboard)
 
-async def register_user_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def register_user_handler(update: types.Message, context=None) -> None:
     """Обработчик для регистрации пользователя и обработки неизвестных сообщений"""
-    user = update.effective_user
+    user = update.from_user
     
     # Регистрируем пользователя
     user_data = {
@@ -52,7 +56,7 @@ async def register_user_handler(update: Update, context: ContextTypes.DEFAULT_TY
     firebase_db.register_user(user_data)
     
     # Обрабатываем текстовые команды для основных функций
-    message_text = update.message.text
+    message_text = update.text
     
     if message_text == "🍎 База знаний":
         # Выполняем то же, что и при нажатии на кнопку knowledge_base
@@ -68,10 +72,7 @@ async def register_user_handler(update: Update, context: ContextTypes.DEFAULT_TY
         is_admin = user.id in ADMIN_IDS
         keyboard = get_main_keyboard(is_admin)
         
-        await update.message.reply_text(
-            "Выберите действие из меню:",
-            reply_markup=keyboard
-        )
+        await update.answer("Выберите действие из меню:", reply_markup=keyboard)
 
 # Импорт здесь, чтобы избежать циклических зависимостей
 from handlers.knowledge_base import knowledge_base_handler

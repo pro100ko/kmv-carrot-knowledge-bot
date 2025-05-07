@@ -1,7 +1,6 @@
 
-from aiogram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.ext import ContextTypes
-from aiogram.constants import ParseMode
+from aiogram import types
+from aiogram.enums import ParseMode
 
 import firebase_db
 from utils.keyboards import get_tests_keyboard, get_test_question_keyboard, get_test_result_keyboard
@@ -9,28 +8,27 @@ from utils.keyboards import get_tests_keyboard, get_test_question_keyboard, get_
 # Глобальный словарь для хранения текущих тестовых сессий пользователей
 user_test_sessions = {}
 
-async def testing_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def testing_handler(update: types.Message | types.CallbackQuery, context=None) -> None:
     """Обработчик для системы тестирования"""
-    query = update.callback_query
-    
     # Получаем доступные тесты из Firebase
     tests = firebase_db.get_tests_list()
     
-    if query:
+    if isinstance(update, types.CallbackQuery):
+        query = update
         await query.answer()
-        await query.edit_message_text(
+        await query.message.edit_text(
             text="Выберите тест для проверки знаний:",
             reply_markup=get_tests_keyboard(tests)
         )
     else:
-        await update.message.reply_text(
+        await update.answer(
             text="Выберите тест для проверки знаний:",
             reply_markup=get_tests_keyboard(tests)
         )
 
-async def test_selection_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def test_selection_handler(update: types.CallbackQuery, context=None) -> None:
     """Обработчик для выбора теста"""
-    query = update.callback_query
+    query = update
     await query.answer()
     
     # Получаем ID теста из callback_data
@@ -40,16 +38,16 @@ async def test_selection_handler(update: Update, context: ContextTypes.DEFAULT_T
     test = firebase_db.get_test(test_id)
     
     if not test:
-        await query.edit_message_text(
+        await query.message.edit_text(
             text="Тест не найден.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 К списку тестов", callback_data="testing")]
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text="🔙 К списку тестов", callback_data="testing")]
             ])
         )
         return
     
     # Создаем новую тестовую сессию для пользователя
-    user_id = update.effective_user.id
+    user_id = query.from_user.id
     user_test_sessions[user_id] = {
         'test_id': test_id,
         'current_question': 0,
@@ -64,17 +62,17 @@ async def test_selection_handler(update: Update, context: ContextTypes.DEFAULT_T
     test_info += f"Для успешного прохождения нужно набрать минимум {test['passing_score']}% правильных ответов.\n\n"
     test_info += "Нажмите на кнопку ниже, чтобы начать тестирование."
     
-    await query.edit_message_text(
+    await query.message.edit_text(
         text=test_info,
         parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("▶️ Начать тестирование", callback_data=f"test_question:{test_id}:start")]
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="▶️ Начать тестирование", callback_data=f"test_question:{test_id}:start")]
         ])
     )
 
-async def test_question_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def test_question_handler(update: types.CallbackQuery, context=None) -> None:
     """Обработчик для вопросов теста"""
-    query = update.callback_query
+    query = update
     await query.answer()
     
     # Получаем информацию из callback_data
@@ -82,13 +80,13 @@ async def test_question_handler(update: Update, context: ContextTypes.DEFAULT_TY
     test_id = parts[1]
     
     # Получаем пользовательскую сессию
-    user_id = update.effective_user.id
+    user_id = query.from_user.id
     if user_id not in user_test_sessions:
         # Если сессии нет, возвращаемся к выбору теста
-        await query.edit_message_text(
+        await query.message.edit_text(
             text="Сессия тестирования истекла. Пожалуйста, начните заново.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 К списку тестов", callback_data="testing")]
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text="🔙 К списку тестов", callback_data="testing")]
             ])
         )
         return
@@ -99,10 +97,10 @@ async def test_question_handler(update: Update, context: ContextTypes.DEFAULT_TY
     test = firebase_db.get_test(test_id)
     
     if not test:
-        await query.edit_message_text(
+        await query.message.edit_text(
             text="Тест не найден.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 К списку тестов", callback_data="testing")]
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text="🔙 К списку тестов", callback_data="testing")]
             ])
         )
         return
@@ -148,7 +146,7 @@ async def test_question_handler(update: Update, context: ContextTypes.DEFAULT_TY
         attempt_id = firebase_db.save_test_attempt(attempt_data)
         
         # Перенаправляем к результатам теста
-        await query.edit_message_text(
+        await query.message.edit_text(
             text="Тест завершен. Расчет результатов...",
             reply_markup=None
         )
@@ -161,7 +159,7 @@ async def test_question_handler(update: Update, context: ContextTypes.DEFAULT_TY
     question_text = f"<b>Вопрос {session['current_question']+1} из {len(test['questions'])}</b>\n\n"
     question_text += current_q['text']
     
-    await query.edit_message_text(
+    await query.message.edit_text(
         text=question_text,
         parse_mode=ParseMode.HTML,
         reply_markup=get_test_question_keyboard(
@@ -171,34 +169,22 @@ async def test_question_handler(update: Update, context: ContextTypes.DEFAULT_TY
         )
     )
 
-async def test_result_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def test_result_handler(update: types.CallbackQuery, context=None) -> None:
     """Обработчик для результатов теста"""
     # Проверяем, это callback или продолжение после завершения теста
-    query = None
-    if update.callback_query:
-        query = update.callback_query
-        await query.answer()
+    query = update
     
     # Получаем пользовательскую сессию
-    user_id = update.effective_user.id
+    user_id = query.from_user.id
     if user_id not in user_test_sessions:
         # Если сессии нет, возвращаемся к выбору теста
         message_text = "Сессия тестирования истекла. Пожалуйста, начните заново."
-        if query:
-            await query.edit_message_text(
-                text=message_text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 К списку тестов", callback_data="testing")]
-                ])
-            )
-        else:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=message_text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 К списку тестов", callback_data="testing")]
-                ])
-            )
+        await query.message.edit_text(
+            text=message_text,
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text="🔙 К списку тестов", callback_data="testing")]
+            ])
+        )
         return
     
     session = user_test_sessions[user_id]
@@ -208,21 +194,12 @@ async def test_result_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     if not test:
         message_text = "Информация о тесте не найдена."
-        if query:
-            await query.edit_message_text(
-                text=message_text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 К списку тестов", callback_data="testing")]
-                ])
-            )
-        else:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=message_text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 К списку тестов", callback_data="testing")]
-                ])
-            )
+        await query.message.edit_text(
+            text=message_text,
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text="🔙 К списку тестов", callback_data="testing")]
+            ])
+        )
         return
     
     # Рассчитываем результат
@@ -245,16 +222,8 @@ async def test_result_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     del user_test_sessions[user_id]
     
     # Отправляем результаты
-    if query:
-        await query.edit_message_text(
-            text=result_text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=get_test_result_keyboard()
-        )
-    else:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=result_text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=get_test_result_keyboard()
-        )
+    await query.message.edit_text(
+        text=result_text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_test_result_keyboard()
+    )
