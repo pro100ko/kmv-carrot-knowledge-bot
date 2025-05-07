@@ -4,9 +4,9 @@ import os
 import sys
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart, Command
+from aiogram.filters.base import CommandStart, Command
 # Используем F фильтр вместо Text
-from aiogram.filters import F
+from aiogram.filters.base import F
 from aiogram.utils.webhook import configure_app, SimpleRequestHandler
 import asyncio
 from aiohttp import web
