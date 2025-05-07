@@ -5,8 +5,8 @@ import sys
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart, Command
-# Изменяем импорт фильтра Text
-from aiogram.filters import Text as TextFilter
+# Используем F фильтр вместо Text
+from aiogram.filters import F
 from aiogram.utils.webhook import configure_app, SimpleRequestHandler
 import asyncio
 from aiohttp import web
@@ -39,7 +39,7 @@ async def start_command(message: types.Message):
     await start(message, None)
 
 # Колбэки для базы знаний
-@dp.callback_query(TextFilter(text="knowledge_base"))
+@dp.callback_query(F.data == "knowledge_base")
 async def kb_callback(callback_query: types.CallbackQuery):
     await knowledge_base_handler(callback_query, None)
 
@@ -52,7 +52,7 @@ async def prod_callback(callback_query: types.CallbackQuery):
     await product_handler(callback_query, None)
 
 # Колбэки для тестирования
-@dp.callback_query(TextFilter(text="testing"))
+@dp.callback_query(F.data == "testing")
 async def testing_callback(callback_query: types.CallbackQuery):
     await testing_handler(callback_query, None)
 
@@ -69,7 +69,7 @@ async def test_result_callback(callback_query: types.CallbackQuery):
     await test_result_handler(callback_query, None)
 
 # Колбэки для админки
-@dp.callback_query(TextFilter(text="admin"))
+@dp.callback_query(F.data == "admin")
 async def admin_callback(callback_query: types.CallbackQuery):
     await admin_handler(callback_query, None)
 
