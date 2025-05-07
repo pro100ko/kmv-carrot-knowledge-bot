@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart, Command
 # Изменяем импорт фильтра Text
-from aiogram.filters.text import Text
+from aiogram.filters import Text
 from aiogram.utils.webhook import configure_app, SimpleRequestHandler
 import asyncio
 from aiohttp import web
