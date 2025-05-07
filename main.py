@@ -1,10 +1,11 @@
-
 import logging
 import os
 import sys
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart, Command, Text
+from aiogram.filters import CommandStart, Command
+# Изменяем импорт фильтра Text
+from aiogram.filters.text import Text
 from aiogram.utils.webhook import configure_app, SimpleRequestHandler
 import asyncio
 from aiohttp import web
