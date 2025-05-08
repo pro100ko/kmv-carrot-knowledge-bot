@@ -12,6 +12,8 @@ from magic_filter import F
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 import asyncio
 from aiohttp import web
+import firebase_admin
+from firebase_admin import credentials
 
 # Импортируем настройки
 from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH
