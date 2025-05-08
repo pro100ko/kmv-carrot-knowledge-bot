@@ -54,7 +54,8 @@ if not firebase_admin._apps:
             print("Firebase initialized from environment variable")
         except Exception as e:
             print(f"Error initializing Firebase from env: {e}")
-    else:
+else:
+    print("Firebase app already initialized")
 
 # Регистрируем обработчики
 @dp.message(CommandStart())
