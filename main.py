@@ -7,7 +7,8 @@ from aiogram.enums import ParseMode
 from aiogram.filters.command import Command, CommandStart
 # Correctly import F from aiogram.filters
 from aiogram.filters import F
-from aiogram.utils.webhook import configure_app, SimpleRequestHandler
+# Используем правильные импорты для вебхука в aiogram 3.x
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 import asyncio
 from aiohttp import web
 
@@ -122,11 +123,15 @@ async def main() -> None:
         # Создаем приложение aiohttp
         app = web.Application()
         
-        # Настраиваем вебхук
-        SimpleRequestHandler(
+        # Настраиваем вебхук (используем новый API aiogram 3.x)
+        webhook_handler = SimpleRequestHandler(
             dispatcher=dp,
             bot=bot,
-        ).register(app, path=WEBHOOK_PATH)
+        )
+        webhook_handler.register(app, path=WEBHOOK_PATH)
+        
+        # Настраиваем приложение с диспетчером
+        setup_application(app, dp, bot=bot)
         
         # Дополнительные обработчики маршрутов
         app.on_startup.append(lambda app: on_startup(bot))
