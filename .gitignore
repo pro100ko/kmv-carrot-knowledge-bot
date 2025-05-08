@@ -17,6 +17,7 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 .DS_Store
+morkovka-kmv-bot-31365aded116.json
 *.suo
 *.ntvs*
 *.njsproj
