@@ -5,8 +5,8 @@ import sys
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters.command import Command, CommandStart
-# Correctly import F from aiogram.filters
-from aiogram.filters import F
+# Correctly import F from aiogram.filters.base
+from aiogram.filters.base import BaseFilter
 # Используем правильные импорты для вебхука в aiogram 3.x
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 import asyncio
@@ -40,7 +40,7 @@ async def start_command(message: types.Message):
     await start(message, None)
 
 # Колбэки для базы знаний
-@dp.callback_query(F.data == "knowledge_base")
+@dp.callback_query(lambda c: c.data == "knowledge_base")
 async def kb_callback(callback_query: types.CallbackQuery):
     await knowledge_base_handler(callback_query, None)
 
@@ -53,7 +53,7 @@ async def prod_callback(callback_query: types.CallbackQuery):
     await product_handler(callback_query, None)
 
 # Колбэки для тестирования
-@dp.callback_query(F.data == "testing")
+@dp.callback_query(lambda c: c.data == "testing")
 async def testing_callback(callback_query: types.CallbackQuery):
     await testing_handler(callback_query, None)
 
@@ -70,7 +70,7 @@ async def test_result_callback(callback_query: types.CallbackQuery):
     await test_result_handler(callback_query, None)
 
 # Колбэки для админки
-@dp.callback_query(F.data == "admin")
+@dp.callback_query(lambda c: c.data == "admin")
 async def admin_callback(callback_query: types.CallbackQuery):
     await admin_handler(callback_query, None)
 
