@@ -42,6 +42,20 @@ bot = Bot(
 cred = credentials.Certificate("morkovka-kmv-bot-31365aded116.json")
 firebase_admin.initialize_app(cred)
 
+# Проверяем, не инициализировано ли приложение уже
+if not firebase_admin._apps:
+    # Вариант 1: Через переменную окружения (лучше для Render)
+    firebase_config = os.getenv('FIREBASE_CONFIG')
+    if firebase_config:
+        try:
+            cred_dict = json.loads(firebase_config)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            print("Firebase initialized from environment variable")
+        except Exception as e:
+            print(f"Error initializing Firebase from env: {e}")
+    else:
+
 # Регистрируем обработчики
 @dp.message(CommandStart())
 @dp.message(Command("help"))
