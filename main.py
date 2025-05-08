@@ -5,8 +5,8 @@ import sys
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters.command import Command, CommandStart
-# Correctly import F from aiogram.filters.base
-from aiogram.filters.base import BaseFilter
+# In aiogram 3.20.0, we can use magic_filter module for filtering
+from magic_filter import F
 # Используем правильные импорты для вебхука в aiogram 3.x
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 import asyncio
@@ -40,62 +40,62 @@ async def start_command(message: types.Message):
     await start(message, None)
 
 # Колбэки для базы знаний
-@dp.callback_query(lambda c: c.data == "knowledge_base")
+@dp.callback_query(F.data == "knowledge_base")
 async def kb_callback(callback_query: types.CallbackQuery):
     await knowledge_base_handler(callback_query, None)
 
-@dp.callback_query(lambda c: c.data.startswith("category:"))
+@dp.callback_query(F.data.startswith("category:"))
 async def cat_callback(callback_query: types.CallbackQuery):
     await category_handler(callback_query, None)
 
-@dp.callback_query(lambda c: c.data.startswith("product:"))
+@dp.callback_query(F.data.startswith("product:"))
 async def prod_callback(callback_query: types.CallbackQuery):
     await product_handler(callback_query, None)
 
 # Колбэки для тестирования
-@dp.callback_query(lambda c: c.data == "testing")
+@dp.callback_query(F.data == "testing")
 async def testing_callback(callback_query: types.CallbackQuery):
     await testing_handler(callback_query, None)
 
-@dp.callback_query(lambda c: c.data.startswith("test_select:"))
+@dp.callback_query(F.data.startswith("test_select:"))
 async def test_select_callback(callback_query: types.CallbackQuery):
     await test_selection_handler(callback_query, None)
 
-@dp.callback_query(lambda c: c.data.startswith("test_answer:"))
+@dp.callback_query(F.data.startswith("test_answer:"))
 async def test_answer_callback(callback_query: types.CallbackQuery):
     await test_question_handler(callback_query, None)
 
-@dp.callback_query(lambda c: c.data.startswith("test_result:"))
+@dp.callback_query(F.data.startswith("test_result:"))
 async def test_result_callback(callback_query: types.CallbackQuery):
     await test_result_handler(callback_query, None)
 
 # Колбэки для админки
-@dp.callback_query(lambda c: c.data == "admin")
+@dp.callback_query(F.data == "admin")
 async def admin_callback(callback_query: types.CallbackQuery):
     await admin_handler(callback_query, None)
 
-@dp.callback_query(lambda c: c.data.startswith("admin_categories"))
+@dp.callback_query(F.data.startswith("admin_categories"))
 async def admin_cat_callback(callback_query: types.CallbackQuery):
     await admin_categories_handler(callback_query, None)
 
-@dp.callback_query(lambda c: c.data.startswith("admin_products"))
+@dp.callback_query(F.data.startswith("admin_products"))
 async def admin_prod_callback(callback_query: types.CallbackQuery):
     await admin_products_handler(callback_query, None)
 
-@dp.callback_query(lambda c: c.data.startswith("admin_tests"))
+@dp.callback_query(F.data.startswith("admin_tests"))
 async def admin_test_callback(callback_query: types.CallbackQuery):
     await admin_tests_handler(callback_query, None)
 
-@dp.callback_query(lambda c: c.data.startswith("admin_stats"))
+@dp.callback_query(F.data.startswith("admin_stats"))
 async def admin_stats_callback(callback_query: types.CallbackQuery):
     await admin_stats_handler(callback_query, None)
 
 # Обработчики для текстовых сообщений
-@dp.message(lambda message: message.text == "🔍 Поиск")
+@dp.message(F.text == "🔍 Поиск")
 async def search_command(message: types.Message):
     await search_handler(message, None)
 
-@dp.message(lambda message: message.text and message.text.startswith("🔍 "))
+@dp.message(F.text.startswith("🔍 "))
 async def search_query_command(message: types.Message):
     await search_handler(message, None)
 
