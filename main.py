@@ -4,6 +4,7 @@ import os
 import sys
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 from aiogram.filters.command import Command, CommandStart
 # In aiogram 3.20.0, we can use magic_filter module for filtering
 from magic_filter import F
@@ -30,8 +31,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Инициализация бота и диспетчера
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
-dp = Dispatcher()
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
+
+# Инициализация Firebase (если используете)
+cred = credentials.Certificate("morkovka-kmv-bot-31365aded116.json")
+firebase_admin.initialize_app(cred)
 
 # Регистрируем обработчики
 @dp.message(CommandStart())
