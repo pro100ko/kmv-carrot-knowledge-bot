@@ -2,11 +2,12 @@
 import logging
 import os
 import sys
+import json
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters.command import Command, CommandStart
-# In aiogram 3.20.0, we can use magic_filter module for filtering
+# В aiogram 3.20.0 используем magic_filter модуль для фильтрации
 from magic_filter import F
 # Используем правильные импорты для вебхука в aiogram 3.x
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
@@ -37,25 +38,30 @@ bot = Bot(
     token=BOT_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
+dp = Dispatcher()  # Создаем экземпляр диспетчера
 
-# Инициализация Firebase (если используете)
-cred = credentials.Certificate("morkovka-kmv-bot-31365aded116.json")
-firebase_admin.initialize_app(cred)
-
-# Проверяем, не инициализировано ли приложение уже
-if not firebase_admin._apps:
-    # Вариант 1: Через переменную окружения (лучше для Render)
-    firebase_config = os.getenv('FIREBASE_CONFIG')
-    if firebase_config:
-        try:
-            cred_dict = json.loads(firebase_config)
-            cred = credentials.Certificate(cred_dict)
+# Инициализация Firebase
+try:
+    # Вариант 1: Через файл учетных данных
+    if os.path.exists("morkovka-kmv-bot-31365aded116.json"):
+        cred = credentials.Certificate("morkovka-kmv-bot-31365aded116.json")
+        if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
-            print("Firebase initialized from environment variable")
+            logger.info("Firebase инициализирован через файл учетных данных")
+    # Вариант 2: Через переменную окружения
+    elif os.environ.get('FIREBASE_CONFIG'):
+        try:
+            cred_dict = json.loads(os.environ.get('FIREBASE_CONFIG'))
+            cred = credentials.Certificate(cred_dict)
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
+                logger.info("Firebase инициализирован через переменную окружения")
         except Exception as e:
-            print(f"Error initializing Firebase from env: {e}")
-else:
-    print("Firebase app already initialized")
+            logger.error(f"Ошибка инициализации Firebase из переменной окружения: {e}")
+    else:
+        logger.warning("Не найдены учетные данные Firebase")
+except Exception as e:
+    logger.error(f"Ошибка при инициализации Firebase: {e}")
 
 # Регистрируем обработчики
 @dp.message(CommandStart())
@@ -157,9 +163,15 @@ async def main() -> None:
         # Настраиваем приложение с диспетчером
         setup_application(app, dp, bot=bot)
         
-        # Дополнительные обработчики маршрутов
-        app.on_startup.append(lambda app: on_startup(bot))
-        app.on_shutdown.append(lambda app: on_shutdown(bot))
+        # Регистрируем колбеки для запуска и остановки
+        async def on_startup_app(app):
+            await on_startup(bot)
+            
+        async def on_shutdown_app(app):
+            await on_shutdown(bot)
+            
+        app.on_startup.append(on_startup_app)
+        app.on_shutdown.append(on_shutdown_app)
         
         # Запускаем веб-приложение
         port = int(os.environ.get("PORT", 8443))
