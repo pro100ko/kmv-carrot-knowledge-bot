@@ -39,24 +39,39 @@ dp = Dispatcher()  # Создаем экземпляр диспетчера
 
 # Инициализация Firebase
 try:
-    # Вариант 1: Через файл учетных данных
-    if os.path.exists("morkovka-kmv-bot-31365aded116.json"):
-        cred = credentials.Certificate("morkovka-kmv-bot-31365aded116.json")
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(cred)
-            logger.info("Firebase инициализирован через файл учетных данных")
-    # Вариант 2: Через переменную окружения
+    # Проверяем наличие переменной окружения FIREBASE_CREDENTIALS_JSON
+    if os.environ.get('FIREBASE_CREDENTIALS_JSON'):
+        try:
+            cred_dict = json.loads(os.environ.get('FIREBASE_CREDENTIALS_JSON'))
+            cred = credentials.Certificate(cred_dict)
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
+                logger.info("Firebase инициализирован через переменную окружения FIREBASE_CREDENTIALS_JSON")
+        except Exception as e:
+            logger.error(f"Ошибка инициализации Firebase из переменной FIREBASE_CREDENTIALS_JSON: {e}")
+    # Проверяем наличие переменной окружения FIREBASE_CONFIG
     elif os.environ.get('FIREBASE_CONFIG'):
         try:
             cred_dict = json.loads(os.environ.get('FIREBASE_CONFIG'))
             cred = credentials.Certificate(cred_dict)
             if not firebase_admin._apps:
                 firebase_admin.initialize_app(cred)
-                logger.info("Firebase инициализирован через переменную окружения")
+                logger.info("Firebase инициализирован через переменную окружения FIREBASE_CONFIG")
         except Exception as e:
-            logger.error(f"Ошибка инициализации Firebase из переменной окружения: {e}")
+            logger.error(f"Ошибка инициализации Firebase из переменной FIREBASE_CONFIG: {e}")
+    # Проверяем наличие файла учетных данных
+    elif os.path.exists("service_account.json"):
+        cred = credentials.Certificate("service_account.json")
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+            logger.info("Firebase инициализирован через файл service_account.json")
+    elif os.path.exists("morkovka-kmv-bot-31365aded116.json"):
+        cred = credentials.Certificate("morkovka-kmv-bot-31365aded116.json")
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+            logger.info("Firebase инициализирован через файл morkovka-kmv-bot-31365aded116.json")
     else:
-        logger.warning("Не найдены учетные данные Firebase")
+        logger.warning("Не найдены учетные данные Firebase. Функциональность базы данных будет недоступна")
 except Exception as e:
     logger.error(f"Ошибка при инициализации Firebase: {e}")
 
