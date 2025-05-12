@@ -3,14 +3,11 @@ import logging
 import os
 import sys
 import json
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters.command import Command, CommandStart
-# В aiogram 3.20.0 используем magic_filter модуль для фильтрации
-from magic_filter import F
-# Используем правильные импорты для вебхука в aiogram 3.x
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+# В aiogram 3.20.0 больше не используем magic_filter напрямую, а используем F из aiogram
 import asyncio
 from aiohttp import web
 import firebase_admin
@@ -154,6 +151,8 @@ async def main() -> None:
         app = web.Application()
         
         # Настраиваем вебхук (используем новый API aiogram 3.x)
+        from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+        
         webhook_handler = SimpleRequestHandler(
             dispatcher=dp,
             bot=bot,
@@ -164,19 +163,15 @@ async def main() -> None:
         setup_application(app, dp, bot=bot)
         
         # Регистрируем колбеки для запуска и остановки
-        async def on_startup_app(app):
-            await on_startup(bot)
-            
-        async def on_shutdown_app(app):
-            await on_shutdown(bot)
-            
-        app.on_startup.append(on_startup_app)
-        app.on_shutdown.append(on_shutdown_app)
+        app.on_startup.append(lambda app: asyncio.create_task(on_startup(bot)))
+        app.on_shutdown.append(lambda app: asyncio.create_task(on_shutdown(bot)))
         
         # Запускаем веб-приложение
         port = int(os.environ.get("PORT", 8443))
         logger.info(f"Запуск webhook на порту {port}")
-        web.run_app(app, host="0.0.0.0", port=port)
+        
+        # Используем await для правильного запуска web-приложения
+        return await web._run_app(app, host="0.0.0.0", port=port)
     else:
         # В режиме разработки используем polling
         await dp.start_polling(bot, on_startup=on_startup, on_shutdown=on_shutdown)
