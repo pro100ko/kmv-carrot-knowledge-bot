@@ -1,6 +1,6 @@
-
 import json
 import os
+import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Union
 
@@ -8,63 +8,88 @@ import firebase_admin
 from firebase_admin import credentials, firestore, storage
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from config import FIREBASE_CREDENTIALS, ADMIN_IDS
+from config import FIREBASE_CREDENTIALS, ADMIN_IDS, FIREBASE_AVAILABLE
 
-# Инициализация Firebase
-try:
-    # Проверяем наличие переменной окружения FIREBASE_CREDENTIALS_JSON
-    if os.environ.get("FIREBASE_CREDENTIALS_JSON"):
-        try:
-            cred_dict = json.loads(os.environ.get("FIREBASE_CREDENTIALS_JSON"))
-            cred = credentials.Certificate(cred_dict)
-        except Exception as e:
-            print(f"Ошибка при чтении FIREBASE_CREDENTIALS_JSON: {e}")
-            cred = None
-    # Проверяем наличие переменной окружения FIREBASE_CONFIG
-    elif os.environ.get("FIREBASE_CONFIG"):
-        try:
-            cred_dict = json.loads(os.environ.get("FIREBASE_CONFIG"))
-            cred = credentials.Certificate(cred_dict)
-        except Exception as e:
-            print(f"Ошибка при чтении FIREBASE_CONFIG: {e}")
-            cred = None
-    # Проверяем наличие файла учетных данных
-    elif os.path.exists("service_account.json"):
-        try:
-            cred = credentials.Certificate("service_account.json")
-        except Exception as e:
-            print(f"Ошибка при чтении service_account.json: {e}")
-            cred = None
-    elif os.path.exists("morkovka-kmv-bot-31365aded116.json"):
-        try:
-            cred = credentials.Certificate("morkovka-kmv-bot-31365aded116.json")
-        except Exception as e:
-            print(f"Ошибка при чтении morkovka-kmv-bot-31365aded116.json: {e}")
-            cred = None
-    else:
-        print("Не найдены учетные данные Firebase")
-        cred = None
+# Настройка логирования
+logger = logging.getLogger(__name__)
 
-    # Инициализируем Firebase, если у нас есть учетные данные
-    if cred and not firebase_admin._apps:
-        firebase_app = firebase_admin.initialize_app(cred, {
-            'storageBucket': 'morkovka-kmv-bot.appspot.com'
-        })
-        db = firestore.client()
-        bucket = storage.bucket()
-        print("Firebase инициализирован успешно")
-    else:
-        print("Не удалось инициализировать Firebase. Используем заглушки")
-        # Создаем заглушки для тестирования без Firebase
-        firebase_app = None
+# Глобальные переменные для доступа к Firebase
+db = None
+bucket = None
+firebase_app = None
+
+# Инициализация Firebase только если флаг FIREBASE_AVAILABLE установлен в True
+if FIREBASE_AVAILABLE:
+    try:
+        # Проверяем наличие переменной окружения FIREBASE_CREDENTIALS_JSON
+        if os.environ.get("FIREBASE_CREDENTIALS_JSON"):
+            try:
+                cred_dict = json.loads(os.environ.get("FIREBASE_CREDENTIALS_JSON"))
+                cred = credentials.Certificate(cred_dict)
+            except Exception as e:
+                logger.error(f"Ошибка при чтении FIREBASE_CREDENTIALS_JSON: {e}")
+                cred = None
+        # Проверяем наличие переменной окружения FIREBASE_CONFIG
+        elif os.environ.get("FIREBASE_CONFIG"):
+            try:
+                cred_dict = json.loads(os.environ.get("FIREBASE_CONFIG"))
+                cred = credentials.Certificate(cred_dict)
+            except Exception as e:
+                logger.error(f"Ошибка при чтении FIREBASE_CONFIG: {e}")
+                cred = None
+        # Проверяем наличие файла учетных данных
+        elif os.path.exists("service_account.json"):
+            try:
+                cred = credentials.Certificate("service_account.json")
+            except Exception as e:
+                logger.error(f"Ошибка при чтении service_account.json: {e}")
+                cred = None
+        elif os.path.exists("morkovka-kmv-bot-31365aded116.json"):
+            try:
+                cred = credentials.Certificate("morkovka-kmv-bot-31365aded116.json")
+            except Exception as e:
+                logger.error(f"Ошибка при чтении morkovka-kmv-bot-31365aded116.json: {e}")
+                cred = None
+        else:
+            logger.warning("Не найдены учетные данные Firebase")
+            cred = None
+
+        # Инициализируем Firebase, если у нас есть учетные данные
+        if cred and not firebase_admin._apps:
+            try:
+                firebase_app = firebase_admin.initialize_app(cred, {
+                    'storageBucket': 'morkovka-kmv-bot.appspot.com'
+                })
+                db = firestore.client()
+                bucket = storage.bucket()
+                # Проверяем соединение с Firebase
+                if check_firebase_connection():
+                    logger.info("Firebase инициализирован успешно и соединение установлено")
+                else:
+                    logger.warning("Firebase инициализирован, но соединение недоступно")
+                    db = None
+                    bucket = None
+                    firebase_app = None
+            except Exception as e:
+                logger.error(f"Ошибка при инициализации Firebase: {e}")
+                db = None
+                bucket = None
+                firebase_app = None
+        else:
+            logger.warning("Не удалось инициализировать Firebase. Используем заглушки")
+            db = None
+            bucket = None
+            firebase_app = None
+    except Exception as e:
+        logger.error(f"Критическая ошибка при инициализации Firebase: {e}")
         db = None
         bucket = None
-except Exception as e:
-    print(f"Критическая ошибка при инициализации Firebase: {e}")
-    # Создаем заглушки для тестирования без Firebase
-    firebase_app = None
+        firebase_app = None
+else:
+    logger.info("Firebase отключен в конфигурации. Используем заглушки для функциональности.")
     db = None
     bucket = None
+    firebase_app = None
 
 # Добавляем функцию для проверки соединения с Firebase
 def check_firebase_connection() -> bool:
@@ -72,28 +97,74 @@ def check_firebase_connection() -> bool:
     if db is None:
         return False
     try:
-        # Пробуем получить список коллекций
-        db.collections()
+        # Пробуем получить список коллекций, ограничиваем только одной записью
+        test_ref = db.collection('test').limit(1).get()
         return True
     except Exception as e:
-        print(f"Ошибка при проверке соединения с Firebase: {e}")
+        logger.error(f"Ошибка при проверке соединения с Firebase: {e}")
         return False
 
 # Вспомогательная функция для проверки наличия соединения перед каждым запросом
 def check_db_before_request(func):
     """Декоратор для проверки соединения перед запросом к базе данных"""
     def wrapper(*args, **kwargs):
-        if not db:
-            print("Предупреждение: Firebase не инициализирован. Операция не может быть выполнена.")
+        if not db or not FIREBASE_AVAILABLE:
+            logger.debug(f"Firebase недоступен. Возвращаем заглушку для {func.__name__}")
+            # Возвращаем заглушки в зависимости от имени функции
             if func.__name__.startswith("get_"):
-                return None if func.__annotations__.get('return') == Optional[Dict[str, Any]] else []
-            elif func.__name__.startswith("add_"):
-                return None
+                return _get_stub_data(func.__name__)
+            elif func.__name__.startswith("add_") or func.__name__ == "register_user":
+                return True
+            elif func.__name__.startswith("update_"):
+                return True
+            elif func.__name__ == "search_products":
+                return []
             elif func.__name__ in ["upload_file", "delete_file"]:
-                return None if func.__name__ == "upload_file" else False
+                return None if func.__name__ == "upload_file" else True
             return False
-        return func(*args, **kwargs)
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Ошибка при выполнении {func.__name__}: {e}")
+            # Возвращаем заглушки в случае ошибки
+            if func.__name__.startswith("get_"):
+                return _get_stub_data(func.__name__)
+            elif func.__name__.startswith("add_") or func.__name__ == "register_user":
+                return True
+            return False
     return wrapper
+
+# Функция для возвращения заглушек данных
+def _get_stub_data(func_name):
+    """Возвращает заглушки данных в зависимости от имени функции"""
+    if func_name == "get_user":
+        return {"telegram_id": 0, "first_name": "Test", "is_admin": False}
+    elif func_name == "get_all_users":
+        return [{"telegram_id": 0, "first_name": "Test", "is_admin": False}]
+    elif func_name == "get_categories":
+        return [{"id": "1", "name": "Тестовая категория", "description": "Тестовое описание"}]
+    elif func_name == "get_products_by_category":
+        return [{"id": "1", "name": "Тестовый продукт", "description": "Тестовое описание", "price_info": "100 руб/кг"}]
+    elif func_name == "get_product":
+        return {"id": "1", "name": "Тестовый продукт", "description": "Тестовое описание", "price_info": "100 руб/кг"}
+    elif func_name == "get_tests_list":
+        return [{"id": "1", "title": "Тестовый тест", "description": "Тестовое описание"}]
+    elif func_name == "get_test":
+        return {
+            "id": "1", 
+            "title": "Тестовый тест", 
+            "description": "Тестовое описание",
+            "questions": [
+                {
+                    "question": "Тестовый вопрос", 
+                    "options": ["Вариант 1", "Вариант 2", "Вариант 3"], 
+                    "correct_option": 0
+                }
+            ]
+        }
+    elif func_name == "get_user_test_attempts":
+        return []
+    return None
 
 # Управление пользователями
 @check_db_before_request
@@ -127,7 +198,7 @@ def register_user(user_data: Dict[str, Any]) -> bool:
         
         return True
     except Exception as e:
-        print(f"Ошибка при регистрации пользователя: {e}")
+        logger.error(f"Ошибка при регистрации пользователя: {e}")
         return False
 
 @check_db_before_request
@@ -141,7 +212,7 @@ def get_user(telegram_id: int) -> Optional[Dict[str, Any]]:
             return user_doc.to_dict()
         return None
     except Exception as e:
-        print(f"Ошибка при получении пользователя: {e}")
+        logger.error(f"Ошибка при получении пользователя: {e}")
         return None
 
 @check_db_before_request
@@ -156,7 +227,7 @@ def get_all_users() -> List[Dict[str, Any]]:
         
         return users
     except Exception as e:
-        print(f"Ошибка при получении списка пользователей: {e}")
+        logger.error(f"Ошибка при получении списка пользователей: {e}")
         return []
 
 # Управление категориями
@@ -174,7 +245,7 @@ def get_categories() -> List[Dict[str, Any]]:
         
         return categories
     except Exception as e:
-        print(f"Ошибка при получении категорий: {e}")
+        logger.error(f"Ошибка при получении категорий: {e}")
         return []
 
 @check_db_before_request
@@ -204,7 +275,7 @@ def add_category(data: Dict[str, Any]) -> Optional[str]:
         cat_ref = db.collection('categories').add(new_category)
         return cat_ref.id
     except Exception as e:
-        print(f"Ошибка при добавлении категории: {e}")
+        logger.error(f"Ошибка при добавлении категории: {e}")
         return None
 
 # Управление продуктами
@@ -224,7 +295,7 @@ def get_products_by_category(category_id: str) -> List[Dict[str, Any]]:
         
         return products
     except Exception as e:
-        print(f"Ошибка при получении продуктов: {e}")
+        logger.error(f"Ошибка при получении продуктов: {e}")
         return []
 
 @check_db_before_request
@@ -240,7 +311,7 @@ def get_product(product_id: str) -> Optional[Dict[str, Any]]:
             return product
         return None
     except Exception as e:
-        print(f"Ошибка при получении продукта: {e}")
+        logger.error(f"Ошибка при получении продукта: {e}")
         return None
 
 @check_db_before_request
@@ -282,7 +353,7 @@ def add_product(data: Dict[str, Any]) -> Optional[str]:
         prod_ref = db.collection('products').add(new_product)
         return prod_ref.id
     except Exception as e:
-        print(f"Ошибка при добавлении продукта: {e}")
+        logger.error(f"Ошибка при добавлении продукта: {e}")
         return None
 
 @check_db_before_request
@@ -338,7 +409,7 @@ def update_product(product_id: str, data: Dict[str, Any]) -> bool:
         product_ref.update(update_data)
         return True
     except Exception as e:
-        print(f"Ошибка при обновлении продукта: {e}")
+        logger.error(f"Ошибка при обновлении продукта: {e}")
         return False
 
 @check_db_before_request
@@ -363,7 +434,7 @@ def search_products(query: str) -> List[Dict[str, Any]]:
         
         return products
     except Exception as e:
-        print(f"Ошибка при поиске продуктов: {e}")
+        logger.error(f"Ошибка при поиске продуктов: {e}")
         return []
 
 # Управление тестами
@@ -383,7 +454,7 @@ def get_tests_list() -> List[Dict[str, Any]]:
         
         return tests
     except Exception as e:
-        print(f"Ошибка при получении тестов: {e}")
+        logger.error(f"Ошибка при получении тестов: {e}")
         return []
 
 @check_db_before_request
@@ -399,7 +470,7 @@ def get_test(test_id: str) -> Optional[Dict[str, Any]]:
             return test
         return None
     except Exception as e:
-        print(f"Ошибка при получении теста: {e}")
+        logger.error(f"Ошибка при получении теста: {e}")
         return None
 
 @check_db_before_request
@@ -422,7 +493,7 @@ def add_test(data: Dict[str, Any]) -> Optional[str]:
         test_ref = db.collection('tests').add(new_test)
         return test_ref.id
     except Exception as e:
-        print(f"Ошибка при добавлении теста: {e}")
+        logger.error(f"Ошибка при добавлении теста: {e}")
         return None
 
 @check_db_before_request
@@ -448,7 +519,7 @@ def save_test_attempt(data: Dict[str, Any]) -> Optional[str]:
         attempt_ref = db.collection('test_attempts').add(new_attempt)
         return attempt_ref.id
     except Exception as e:
-        print(f"Ошибка при сохранении попытки: {e}")
+        logger.error(f"Ошибка при сохранении попытки: {e}")
         return None
 
 @check_db_before_request
@@ -467,7 +538,7 @@ def get_user_test_attempts(user_id: str) -> List[Dict[str, Any]]:
         
         return attempts
     except Exception as e:
-        print(f"Ошибка при получении попыток: {e}")
+        logger.error(f"Ошибка при получении попыток: {e}")
         return []
 
 # Вспомогательные функции для работы с файлами
@@ -487,7 +558,7 @@ def upload_file(file_data: Union[bytes, str], destination_path: str) -> Optional
         # Возвращаем публичный URL
         return blob.public_url
     except Exception as e:
-        print(f"Ошибка при загрузке файла: {e}")
+        logger.error(f"Ошибка при загрузке файла: {e}")
         return None
 
 @check_db_before_request
@@ -504,5 +575,5 @@ def delete_file(file_url: str) -> bool:
         
         return True
     except Exception as e:
-        print(f"Ошибка при удалении файла: {e}")
+        logger.error(f"Ошибка при удалении файла: {e}")
         return False

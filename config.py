@@ -15,6 +15,7 @@ WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 # Настройки Firebase
 FIREBASE_CREDENTIALS = os.environ.get("FIREBASE_CREDENTIALS", "service_account.json")
 FIREBASE_DATABASE_URL = "https://morkovka-kmv-bot.firebaseio.com"
+FIREBASE_AVAILABLE = False  # Будет установлено в True, если Firebase успешно инициализирован
 
 # Основные категории товаров
 PRODUCT_CATEGORIES = [

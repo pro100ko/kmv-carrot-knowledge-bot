@@ -7,7 +7,6 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters.command import Command, CommandStart
-# В aiogram 3.20.0 больше не используем magic_filter напрямую, а используем F из aiogram
 import asyncio
 from aiohttp import web
 import firebase_admin
@@ -15,12 +14,6 @@ from firebase_admin import credentials
 
 # Импортируем настройки
 from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH
-
-# Импортируем обработчики
-from handlers.user_management import register_user_handler, start
-from handlers.knowledge_base import knowledge_base_handler, category_handler, product_handler, search_handler
-from handlers.testing import testing_handler, test_selection_handler, test_question_handler, test_result_handler
-from handlers.admin import admin_handler, admin_categories_handler, admin_products_handler, admin_tests_handler, admin_stats_handler
 
 # Настройка логирования
 logging.basicConfig(
@@ -38,6 +31,7 @@ bot = Bot(
 dp = Dispatcher()  # Создаем экземпляр диспетчера
 
 # Инициализация Firebase
+firebase_initialized = False
 try:
     # Проверяем наличие переменной окружения FIREBASE_CREDENTIALS_JSON
     if os.environ.get('FIREBASE_CREDENTIALS_JSON'):
@@ -46,9 +40,11 @@ try:
             cred = credentials.Certificate(cred_dict)
             if not firebase_admin._apps:
                 firebase_admin.initialize_app(cred)
+                firebase_initialized = True
                 logger.info("Firebase инициализирован через переменную окружения FIREBASE_CREDENTIALS_JSON")
         except Exception as e:
             logger.error(f"Ошибка инициализации Firebase из переменной FIREBASE_CREDENTIALS_JSON: {e}")
+    
     # Проверяем наличие переменной окружения FIREBASE_CONFIG
     elif os.environ.get('FIREBASE_CONFIG'):
         try:
@@ -56,24 +52,68 @@ try:
             cred = credentials.Certificate(cred_dict)
             if not firebase_admin._apps:
                 firebase_admin.initialize_app(cred)
+                firebase_initialized = True
                 logger.info("Firebase инициализирован через переменную окружения FIREBASE_CONFIG")
         except Exception as e:
             logger.error(f"Ошибка инициализации Firebase из переменной FIREBASE_CONFIG: {e}")
+    
     # Проверяем наличие файла учетных данных
     elif os.path.exists("service_account.json"):
-        cred = credentials.Certificate("service_account.json")
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(cred)
-            logger.info("Firebase инициализирован через файл service_account.json")
+        try:
+            cred = credentials.Certificate("service_account.json")
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
+                firebase_initialized = True
+                logger.info("Firebase инициализирован через файл service_account.json")
+        except Exception as e:
+            logger.error(f"Ошибка инициализации Firebase из файла service_account.json: {e}")
+    
+    # Проверяем другой файл учетных данных
     elif os.path.exists("morkovka-kmv-bot-31365aded116.json"):
-        cred = credentials.Certificate("morkovka-kmv-bot-31365aded116.json")
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(cred)
-            logger.info("Firebase инициализирован через файл morkovka-kmv-bot-31365aded116.json")
+        try:
+            cred = credentials.Certificate("morkovka-kmv-bot-31365aded116.json")
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
+                firebase_initialized = True
+                logger.info("Firebase инициализирован через файл morkovka-kmv-bot-31365aded116.json")
+        except Exception as e:
+            logger.error(f"Ошибка инициализации Firebase из файла morkovka-kmv-bot-31365aded116.json: {e}")
+    
     else:
         logger.warning("Не найдены учетные данные Firebase. Функциональность базы данных будет недоступна")
 except Exception as e:
     logger.error(f"Ошибка при инициализации Firebase: {e}")
+
+# Проверяем, что Firebase действительно работает
+if firebase_initialized:
+    try:
+        # Простая проверка - попытка получить доступ к Firestore
+        from firebase_admin import firestore
+        db = firestore.client()
+        # Проверочная операция чтения
+        test_ref = db.collection('test').limit(1).get()
+        logger.info("Firebase успешно проинициализирован и работает")
+    except Exception as e:
+        logger.error(f"Firebase был инициализирован, но тестовый запрос не удался: {e}")
+        logger.warning("Бот будет работать без базы данных Firebase")
+        firebase_initialized = False
+        # Удаляем существующее приложение Firebase, если оно было создано
+        if firebase_admin._apps:
+            for app in list(firebase_admin._apps.values()):
+                try:
+                    firebase_admin.delete_app(app)
+                except Exception as delete_error:
+                    logger.warning(f"Не удалось удалить приложение Firebase: {delete_error}")
+
+# Устанавливаем флаг доступности Firebase в конфигурации
+import config
+config.FIREBASE_AVAILABLE = firebase_initialized
+
+# Импортируем обработчики
+from handlers.user_management import register_user_handler, start
+from handlers.knowledge_base import knowledge_base_handler, category_handler, product_handler, search_handler
+from handlers.testing import testing_handler, test_selection_handler, test_question_handler, test_result_handler
+from handlers.admin import admin_handler, admin_categories_handler, admin_products_handler, admin_tests_handler, admin_stats_handler
 
 # Регистрируем обработчики
 @dp.message(CommandStart())
