@@ -11,7 +11,7 @@ import asyncio
 from aiohttp import web
 
 # Импортируем настройки
-from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH, MONGODB_URI
+from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH
 
 # Настройка логирования
 logging.basicConfig(
@@ -28,25 +28,18 @@ bot = Bot(
 )
 dp = Dispatcher()  # Создаем экземпляр диспетчера
 
-# Инициализация MongoDB
-mongo_initialized = False
+# Инициализация SQLite
+sqlite_initialized = False
 try:
-    if MONGODB_URI:
-        try:
-            # Проверяем подключение к MongoDB
-            import mongo_db
-            if mongo_db.MONGODB_AVAILABLE:
-                mongo_initialized = True
-                logger.info("MongoDB успешно проинициализирована и работает")
-            else:
-                logger.warning("MongoDB не подключена. Бот будет работать в ограниченном режиме.")
-        except Exception as e:
-            logger.error(f"Ошибка при проверке MongoDB: {e}")
-            logger.warning("Бот будет работать без базы данных MongoDB")
+    import sqlite_db
+    if sqlite_db.SQLITE_AVAILABLE:
+        sqlite_initialized = True
+        logger.info("SQLite успешно проинициализирована и работает")
     else:
-        logger.warning("Строка подключения MongoDB не найдена. Бот будет работать в ограниченном режиме.")
+        logger.warning("SQLite не инициализирована. Бот будет работать в ограниченном режиме.")
 except Exception as e:
-    logger.error(f"Ошибка при инициализации MongoDB: {e}")
+    logger.error(f"Ошибка при инициализации SQLite: {e}")
+    logger.warning("Бот будет работать без базы данных")
 
 # Импортируем обработчики
 from handlers.user_management import register_user_handler, start
