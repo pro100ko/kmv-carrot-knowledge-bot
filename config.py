@@ -12,6 +12,9 @@ WEBHOOK_HOST = os.environ.get("WEBHOOK_URL", "https://your-app-name.onrender.com
 WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
+# Настройки MongoDB
+MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb+srv://username:password@cluster.mongodb.net/morkovka_kmv_bot?retryWrites=true&w=majority")
+
 # Настройки Firebase
 FIREBASE_CREDENTIALS = os.environ.get("FIREBASE_CREDENTIALS", "service_account.json")
 FIREBASE_DATABASE_URL = "https://morkovka-kmv-bot.firebaseio.com"

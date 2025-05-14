@@ -2,7 +2,7 @@
 from aiogram import types
 from aiogram.enums import ParseMode
 
-import firebase_db
+import mongo_db
 from config import ADMIN_IDS
 from utils.keyboards import get_main_keyboard
 
@@ -22,7 +22,7 @@ async def start(update: types.Message | types.CallbackQuery, context=None) -> No
         'last_name': user.last_name,
         'username': user.username,
     }
-    firebase_db.register_user(user_data)
+    mongo_db.register_user(user_data)
     
     # Отправляем приветственное сообщение
     welcome_message = (
@@ -53,7 +53,7 @@ async def register_user_handler(update: types.Message, context=None) -> None:
         'last_name': user.last_name,
         'username': user.username,
     }
-    firebase_db.register_user(user_data)
+    mongo_db.register_user(user_data)
     
     # Обрабатываем текстовые команды для основных функций
     message_text = update.text

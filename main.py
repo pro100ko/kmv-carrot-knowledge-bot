@@ -9,11 +9,9 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.filters.command import Command, CommandStart
 import asyncio
 from aiohttp import web
-import firebase_admin
-from firebase_admin import credentials
 
 # Импортируем настройки
-from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH
+from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH, MONGODB_URI
 
 # Настройка логирования
 logging.basicConfig(
@@ -30,84 +28,25 @@ bot = Bot(
 )
 dp = Dispatcher()  # Создаем экземпляр диспетчера
 
-# Инициализация Firebase
-firebase_initialized = False
+# Инициализация MongoDB
+mongo_initialized = False
 try:
-    # Проверяем наличие переменной окружения FIREBASE_CREDENTIALS_JSON
-    if os.environ.get('FIREBASE_CREDENTIALS_JSON'):
+    if MONGODB_URI:
         try:
-            cred_dict = json.loads(os.environ.get('FIREBASE_CREDENTIALS_JSON'))
-            cred = credentials.Certificate(cred_dict)
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(cred)
-                firebase_initialized = True
-                logger.info("Firebase инициализирован через переменную окружения FIREBASE_CREDENTIALS_JSON")
+            # Проверяем подключение к MongoDB
+            import mongo_db
+            if mongo_db.MONGODB_AVAILABLE:
+                mongo_initialized = True
+                logger.info("MongoDB успешно проинициализирована и работает")
+            else:
+                logger.warning("MongoDB не подключена. Бот будет работать в ограниченном режиме.")
         except Exception as e:
-            logger.error(f"Ошибка инициализации Firebase из переменной FIREBASE_CREDENTIALS_JSON: {e}")
-    
-    # Проверяем наличие переменной окружения FIREBASE_CONFIG
-    elif os.environ.get('FIREBASE_CONFIG'):
-        try:
-            cred_dict = json.loads(os.environ.get('FIREBASE_CONFIG'))
-            cred = credentials.Certificate(cred_dict)
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(cred)
-                firebase_initialized = True
-                logger.info("Firebase инициализирован через переменную окружения FIREBASE_CONFIG")
-        except Exception as e:
-            logger.error(f"Ошибка инициализации Firebase из переменной FIREBASE_CONFIG: {e}")
-    
-    # Проверяем наличие файла учетных данных
-    elif os.path.exists("service_account.json"):
-        try:
-            cred = credentials.Certificate("service_account.json")
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(cred)
-                firebase_initialized = True
-                logger.info("Firebase инициализирован через файл service_account.json")
-        except Exception as e:
-            logger.error(f"Ошибка инициализации Firebase из файла service_account.json: {e}")
-    
-    # Проверяем другой файл учетных данных
-    elif os.path.exists("morkovka-kmv-bot-31365aded116.json"):
-        try:
-            cred = credentials.Certificate("morkovka-kmv-bot-31365aded116.json")
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(cred)
-                firebase_initialized = True
-                logger.info("Firebase инициализирован через файл morkovka-kmv-bot-31365aded116.json")
-        except Exception as e:
-            logger.error(f"Ошибка инициализации Firebase из файла morkovka-kmv-bot-31365aded116.json: {e}")
-    
+            logger.error(f"Ошибка при проверке MongoDB: {e}")
+            logger.warning("Бот будет работать без базы данных MongoDB")
     else:
-        logger.warning("Не найдены учетные данные Firebase. Функциональность базы данных будет недоступна")
+        logger.warning("Строка подключения MongoDB не найдена. Бот будет работать в ограниченном режиме.")
 except Exception as e:
-    logger.error(f"Ошибка при инициализации Firebase: {e}")
-
-# Проверяем, что Firebase действительно работает
-if firebase_initialized:
-    try:
-        # Простая проверка - попытка получить доступ к Firestore
-        from firebase_admin import firestore
-        db = firestore.client()
-        # Проверочная операция чтения
-        test_ref = db.collection('test').limit(1).get()
-        logger.info("Firebase успешно проинициализирован и работает")
-    except Exception as e:
-        logger.error(f"Firebase был инициализирован, но тестовый запрос не удался: {e}")
-        logger.warning("Бот будет работать без базы данных Firebase")
-        firebase_initialized = False
-        # Удаляем существующее приложение Firebase, если оно было создано
-        if firebase_admin._apps:
-            for app in list(firebase_admin._apps.values()):
-                try:
-                    firebase_admin.delete_app(app)
-                except Exception as delete_error:
-                    logger.warning(f"Не удалось удалить приложение Firebase: {delete_error}")
-
-# Устанавливаем флаг доступности Firebase в конфигурации
-import config
-config.FIREBASE_AVAILABLE = firebase_initialized
+    logger.error(f"Ошибка при инициализации MongoDB: {e}")
 
 # Импортируем обработчики
 from handlers.user_management import register_user_handler, start
