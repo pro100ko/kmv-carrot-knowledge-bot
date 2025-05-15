@@ -2,7 +2,6 @@
 import logging
 import os
 import sys
-import json
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
@@ -36,10 +35,12 @@ try:
         sqlite_initialized = True
         logger.info("SQLite успешно проинициализирована и работает")
     else:
-        logger.warning("SQLite не инициализирована. Бот будет работать в ограниченном режиме.")
+        logger.error("SQLite не удалось инициализировать. Бот не может работать без базы данных")
+        sys.exit(1)
 except Exception as e:
-    logger.error(f"Ошибка при инициализации SQLite: {e}")
-    logger.warning("Бот будет работать без базы данных")
+    logger.error(f"Критическая ошибка при инициализации SQLite: {e}")
+    logger.error("Бот не может работать без базы данных")
+    sys.exit(1)
 
 # Импортируем обработчики
 from handlers.user_management import register_user_handler, start

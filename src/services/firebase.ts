@@ -1,6 +1,9 @@
 
-// This file is kept for compatibility, but Firebase functionality is disabled
-// The application now uses only SQLite for data storage
+// SQLite заменяет Firebase в качестве хранилища данных
+// Это файл является заглушкой для сохранения совместимости с существующим кодом
+
+// Все методы Firebase заменены на соответствующие SQLite операции на сервере
+// Клиент получает данные через API бота
 
 const db = null;
 const storage = null;
