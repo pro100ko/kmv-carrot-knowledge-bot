@@ -2,12 +2,7 @@
 from aiogram import types
 from aiogram.enums import ParseMode
 
-import firebase_db
 import sqlite_db
-
-# Определяем, какую базу данных использовать
-# Если Firebase доступен, используем его, иначе SQLite
-DB_MODULE = firebase_db if firebase_db.FIREBASE_AVAILABLE else sqlite_db
 
 from utils.keyboards import get_categories_keyboard, get_products_keyboard, get_product_navigation_keyboard
 
@@ -17,7 +12,7 @@ product_image_indices = {}
 async def knowledge_base_handler(update: types.Message | types.CallbackQuery, context=None) -> None:
     """Обработчик для базы знаний"""
     # Получаем категории
-    categories = DB_MODULE.get_categories()
+    categories = sqlite_db.get_categories()
     
     if isinstance(update, types.CallbackQuery):
         # Отправляем сообщение с категориями
@@ -43,12 +38,12 @@ async def category_handler(update: types.CallbackQuery, context=None) -> None:
     category_id = query.data.split(':')[1]
     
     # Получаем продукты для выбранной категории
-    products = DB_MODULE.get_products_by_category(category_id)
+    products = sqlite_db.get_products_by_category(category_id)
     
     # Если продукты есть, отправляем их список
     if products:
         # Получаем информацию о выбранной категории
-        categories = DB_MODULE.get_categories()
+        categories = sqlite_db.get_categories()
         selected_category = next((c for c in categories if c['id'] == category_id), None)
         
         category_name = selected_category['name'] if selected_category else "Категория"
@@ -77,7 +72,7 @@ async def product_handler(update: types.CallbackQuery, context=None) -> None:
     product_id = parts[1]
     
     # Получаем информацию о продукте
-    product = DB_MODULE.get_product(product_id)
+    product = sqlite_db.get_product(product_id)
     
     if not product:
         await query.message.edit_text(
@@ -185,7 +180,7 @@ async def search_handler(update: types.Message, context=None) -> None:
         return
     
     # Выполняем поиск
-    products = DB_MODULE.search_products(query_text)
+    products = sqlite_db.search_products(query_text)
     
     if products:
         # Ограничиваем количество результатов

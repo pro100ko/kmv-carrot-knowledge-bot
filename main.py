@@ -1,3 +1,4 @@
+
 import logging
 import os
 import sys
@@ -39,23 +40,6 @@ try:
 except Exception as e:
     logger.error(f"Ошибка при инициализации SQLite: {e}")
     logger.warning("Бот будет работать без базы данных")
-
-# Проверяем доступность Firebase
-firebase_initialized = False
-try:
-    import firebase_db
-    if firebase_db.FIREBASE_AVAILABLE:
-        firebase_initialized = True
-        logger.info("Firebase успешно проинициализирована и работает")
-    else:
-        logger.warning("Firebase недоступна. Бот будет работать с SQLite.")
-except Exception as e:
-    logger.error(f"Ошибка при инициализации Firebase: {e}")
-    logger.warning("Бот будет работать без Firebase")
-
-# Если нет ни SQLite, ни Firebase, предупреждаем
-if not sqlite_initialized and not firebase_initialized:
-    logger.warning("Ни SQLite, ни Firebase не инициализированы. Бот будет работать в ограниченном режиме.")
 
 # Импортируем обработчики
 from handlers.user_management import register_user_handler, start
