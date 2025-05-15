@@ -1,9 +1,6 @@
 
-// SQLite заменяет Firebase в качестве хранилища данных
-// Это файл является заглушкой для сохранения совместимости с существующим кодом
-
-// Все методы Firebase заменены на соответствующие SQLite операции на сервере
-// Клиент получает данные через API бота
+// This file is a placeholder since we've completely removed Firebase
+// The bot now uses SQLite exclusively for data storage
 
 const db = null;
 const storage = null;
