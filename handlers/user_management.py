@@ -2,7 +2,12 @@
 from aiogram import types
 from aiogram.enums import ParseMode
 
-from sqlite_db import get_test_attempts, get_user, register_user, get_user_test_history
+from sqlite_db import (
+    get_user,
+    register_user,
+    get_test_attempts,
+    get_user_test_history
+)
 from config import ADMIN_IDS
 from utils.keyboards import get_main_keyboard
 
