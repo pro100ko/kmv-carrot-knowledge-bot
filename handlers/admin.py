@@ -3,7 +3,7 @@ from aiogram import types
 from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-
+from utils.message_utils import safe_edit_message
 from sqlite_db import (
     add_test,
     get_categories,
@@ -83,10 +83,10 @@ async def admin_categories_handler(update: types.CallbackQuery, context=None) ->
     # Получаем категории из Firebase
     categories = get_categories()
     
-    # Отображаем список категорий для управления
-    await query.message.edit_text(
+    # Используем безопасное редактирование
+    await safe_edit_message(
+        message=query.message,
         text="📂 <b>Управление категориями</b>\n\nВыберите категорию для редактирования или создайте новую:",
-        parse_mode=ParseMode.HTML,
         reply_markup=get_admin_categories_keyboard(categories)
     )
 
