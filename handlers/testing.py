@@ -25,7 +25,7 @@ if isinstance(update, types.CallbackQuery):
             text="Выберите тест для проверки знаний:",
             reply_markup=get_tests_keyboard(tests)
         )
-    else:
+else:
         await update.answer(
             text="Выберите тест для проверки знаний:",
             reply_markup=get_tests_keyboard(tests)
