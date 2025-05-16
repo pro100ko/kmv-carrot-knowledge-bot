@@ -40,7 +40,7 @@ async def test_selection_handler(update: types.CallbackQuery, context=None) -> N
     test_id = query.data.split(':')[1]
     
     # Получаем информацию о тесте
-    test = firebase_db.get_test(test_id)
+    test = get_test(test_id)
     
     if not test:
         await query.message.edit_text(
@@ -99,7 +99,7 @@ async def test_question_handler(update: types.CallbackQuery, context=None) -> No
     session = user_test_sessions[user_id]
     
     # Получаем информацию о тесте
-    test = firebase_db.get_test(test_id)
+    test = get_test(test_id)
     
     if not test:
         await query.message.edit_text(
@@ -148,7 +148,7 @@ async def test_question_handler(update: types.CallbackQuery, context=None) -> No
             'answers': session['answers'],
             'completed': True
         }
-        attempt_id = firebase_db.save_test_attempt(attempt_data)
+        attempt_id = save_test_attempt(attempt_data)
         
         # Перенаправляем к результатам теста
         await query.message.edit_text(
@@ -195,7 +195,7 @@ async def test_result_handler(update: types.CallbackQuery, context=None) -> None
     session = user_test_sessions[user_id]
     
     # Получаем информацию о тесте
-    test = firebase_db.get_test(session['test_id'])
+    test = get_test(test_id)
     
     if not test:
         message_text = "Информация о тесте не найдена."
