@@ -1,35 +1,42 @@
 
 from aiogram import types
 from aiogram.enums import ParseMode
-
 from sqlite_db import (
     get_tests_list,
     get_test,
     save_test_attempt
 )
-from utils.keyboards import get_tests_keyboard, get_test_question_keyboard, get_test_result_keyboard
+from utils.keyboards import (
+    get_tests_keyboard,
+    get_test_question_keyboard,
+    get_test_result_keyboard
+)
 
 # Глобальный словарь для хранения текущих тестовых сессий пользователей
 user_test_sessions = {}
 
 async def testing_handler(update: types.Message | types.CallbackQuery, context=None) -> None:
     """Обработчик для системы тестирования"""
-    # Получаем доступные тесты из Firebase
-from sqlite_db import gget_tests_list
-tests = get_tests_list()
-    
+    try:
+        tests = get_tests_list()
+        if not tests:
+            error_msg = "Тесты временно недоступны"
+            if isinstance(update, types.CallbackQuery):
+                await update.message.edit_text(error_msg)
+            else:
+                await update.answer(error_msg)
+            return
+
 if isinstance(update, types.CallbackQuery):
-        query = update
-        await query.answer()
-        await query.message.edit_text(
-            text="Выберите тест для проверки знаний:",
-            reply_markup=get_tests_keyboard(tests)
-        )
-else:
-        await update.answer(
-            text="Выберите тест для проверки знаний:",
-            reply_markup=get_tests_keyboard(tests)
-        )
+            await handle_callback_testing(update, tests)
+        else:
+            await handle_message_testing(update, tests)
+    except Exception as e:
+        error_msg = f"Ошибка: {str(e)}"
+        if isinstance(update, types.CallbackQuery):
+            await update.message.edit_text(error_msg)
+        else:
+            await update.answer(error_msg)
 
 async def test_selection_handler(update: types.CallbackQuery, context=None) -> None:
     """Обработчик для выбора теста"""
