@@ -1,7 +1,5 @@
-
 from aiogram import types
 from aiogram.enums import ParseMode
-
 from sqlite_db import (
     get_user,
     register_user,
@@ -27,7 +25,7 @@ async def start(update: types.Message | types.CallbackQuery, context=None) -> No
         'last_name': user.last_name,
         'username': user.username,
     }
-    sqlite_db.register_user(user_data)
+    register_user(user_data)
     
     # Отправляем приветственное сообщение
     welcome_message = (
@@ -47,25 +45,8 @@ async def start(update: types.Message | types.CallbackQuery, context=None) -> No
     else:
         await update.answer(welcome_message, reply_markup=keyboard)
 
-async def get_test_attempts(user_id: int):
-    """Получает попытки тестирования пользователя"""
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = dict_factory
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT t.title, ta.score, ta.max_score, ta.completed_at 
-        FROM test_attempts ta
-        JOIN tests t ON ta.test_id = t.id
-        WHERE ta.user_id = ?
-    """, (user_id,))
-    
-    attempts = cursor.fetchall()
-    conn.close()
-    return attempts
-
 async def register_user_handler(update: types.Message, context=None) -> None:
-    """Обработчик для регистрации пользователя и обработки неизвестных сообщений"""
+    """Обработчик для регистрации пользователя"""
     user = update.from_user
     
     # Регистрируем пользователя
@@ -75,21 +56,26 @@ async def register_user_handler(update: types.Message, context=None) -> None:
         'last_name': user.last_name,
         'username': user.username,
     }
-    sqlite_db.register_user(user_data)
+    register_user(user_data)
     
-    # Обрабатываем текстовые команды для основных функций
+    # Получаем обработчики динамически при вызове
+    from handlers.knowledge_base import knowledge_base_handler
+    from handlers.testing import testing_handler
+    from handlers.admin import admin_handler
+    
+    # Обрабатываем текстовые команды
     message_text = update.text
     
     if message_text == "🍎 База знаний":
-        # Выполняем то же, что и при нажатии на кнопку knowledge_base
         await knowledge_base_handler(update, context)
     elif message_text == "📝 Тестирование":
-        # Выполняем то же, что и при нажатии на кнопку testing
         await testing_handler(update, context)
     elif message_text == "⚙️ Админ панель" and user.id in ADMIN_IDS:
-        # Выполняем то же, что и при нажатии на кнопку admin
         await admin_handler(update, context)
     else:
+        is_admin = user.id in ADMIN_IDS
+        keyboard = get_main_keyboard(is_admin)
+        await update.answer("Выберите действие из меню:", reply_markup=keyboard)
         # Для неизвестных команд отправляем основное меню
         is_admin = user.id in ADMIN_IDS
         keyboard = get_main_keyboard(is_admin)
