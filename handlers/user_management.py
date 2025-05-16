@@ -2,7 +2,7 @@
 from aiogram import types
 from aiogram.enums import ParseMode
 
-import sqlite_db
+import sqlite_db import get_test_attempts
 from config import ADMIN_IDS
 from utils.keyboards import get_main_keyboard
 
@@ -41,6 +41,23 @@ async def start(update: types.Message | types.CallbackQuery, context=None) -> No
         await update.message.answer(welcome_message, reply_markup=keyboard)
     else:
         await update.answer(welcome_message, reply_markup=keyboard)
+
+async def get_test_attempts(user_id: int):
+    """Получает попытки тестирования пользователя"""
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = dict_factory
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT t.title, ta.score, ta.max_score, ta.completed_at 
+        FROM test_attempts ta
+        JOIN tests t ON ta.test_id = t.id
+        WHERE ta.user_id = ?
+    """, (user_id,))
+    
+    attempts = cursor.fetchall()
+    conn.close()
+    return attempts
 
 async def register_user_handler(update: types.Message, context=None) -> None:
     """Обработчик для регистрации пользователя и обработки неизвестных сообщений"""
