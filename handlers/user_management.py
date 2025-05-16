@@ -46,6 +46,7 @@ async def start(update: types.Message | types.CallbackQuery, context=None) -> No
         await update.answer(welcome_message, reply_markup=keyboard)
 
 async def register_user_handler(update: types.Message, context=None) -> None:
+    from handlers.admin import admin_handler
     """Обработчик для регистрации пользователя"""
     user = update.from_user
     
@@ -85,4 +86,3 @@ async def register_user_handler(update: types.Message, context=None) -> None:
 # Импорт здесь, чтобы избежать циклических зависимостей
 from handlers.knowledge_base import knowledge_base_handler
 from handlers.testing import testing_handler
-from handlers.admin import admin_handler
