@@ -18,7 +18,7 @@ async def testing_handler(update: types.Message | types.CallbackQuery, context=N
 from sqlite_db import get_quiz_tests
 tests = await get_quiz_tests()
     
-    if isinstance(update, types.CallbackQuery):
+if isinstance(update, types.CallbackQuery):
         query = update
         await query.answer()
         await query.message.edit_text(
