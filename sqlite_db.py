@@ -632,5 +632,40 @@ def save_test_attempt(attempt_data: Dict[str, Any]) -> Optional[int]:
         print(f"Ошибка при сохранении результата теста: {e}")
         return None
 
+def get_user_test_history(user_id: int, test_id: int) -> List[Dict]:
+    """История прохождений конкретного теста"""
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = dict_factory
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT * FROM test_attempts 
+        WHERE user_id = ? AND test_id = ?
+        ORDER BY completed_at DESC
+    """, (user_id, test_id))
+    
+    history = cursor.fetchall()
+    conn.close()
+    return history
+
+def get_leaderboard(test_id: int, limit: int = 10) -> List[Dict]:
+    """Таблица лидеров для теста"""
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = dict_factory
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT u.username, ta.score, ta.max_score 
+        FROM test_attempts ta
+        JOIN users u ON ta.user_id = u.telegram_id
+        WHERE ta.test_id = ? AND ta.completed = 1
+        ORDER BY ta.score DESC 
+        LIMIT ?
+    """, (test_id, limit))
+    
+    leaderboard = cursor.fetchall()
+    conn.close()
+    return leaderboard
+
 # Инициализация при импорте модуля
 init_sqlite()
