@@ -2,7 +2,7 @@
 from aiogram import types
 from aiogram.enums import ParseMode
 
-import database.repository
+import sqlite_db
 from utils.keyboards import get_tests_keyboard, get_test_question_keyboard, get_test_result_keyboard
 
 # Глобальный словарь для хранения текущих тестовых сессий пользователей
@@ -11,7 +11,7 @@ user_test_sessions = {}
 async def testing_handler(update: types.Message | types.CallbackQuery, context=None) -> None:
     """Обработчик для системы тестирования"""
     # Получаем доступные тесты из Firebase
-from database.repository import get_quiz_tests
+from sqlite_db import get_quiz_tests
 tests = await get_quiz_tests()
     
     if isinstance(update, types.CallbackQuery):
