@@ -4,7 +4,12 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-import sqlite_db import add_test, get_categories, add_category, get_products_by_category
+import sqlite_db import (
+    add_test,
+    get_categories,
+    add_category,
+    get_products_by_category
+)
 from config import ADMIN_IDS
 from utils.keyboards import get_admin_keyboard, get_admin_categories_keyboard, get_admin_products_keyboard, get_admin_products_list_keyboard, get_admin_tests_keyboard, get_admin_stats_keyboard
 
