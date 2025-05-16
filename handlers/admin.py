@@ -8,7 +8,7 @@ from sqlite_db import (
     add_test,
     get_categories,
     add_category,
-    get_products_by_category
+    get_products_by_category,
     get_tests_list
 )
 from config import ADMIN_IDS
