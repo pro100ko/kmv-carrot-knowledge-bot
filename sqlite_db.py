@@ -632,21 +632,53 @@ def save_test_attempt(attempt_data: Dict[str, Any]) -> Optional[int]:
         print(f"Ошибка при сохранении результата теста: {e}")
         return None
 
+def get_test_attempts(user_id: int) -> List[Dict]:
+    """Получает все попытки тестирования пользователя"""
+    if not SQLITE_AVAILABLE:
+        return []
+    
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = dict_factory
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT t.title, ta.score, ta.max_score, ta.completed_at 
+            FROM test_attempts ta
+            JOIN tests t ON ta.test_id = t.id
+            WHERE ta.user_id = ?
+            ORDER BY ta.completed_at DESC
+        """, (user_id,))
+        
+        attempts = cursor.fetchall()
+        conn.close()
+        return attempts
+    except Exception as e:
+        print(f"Ошибка при получении попыток тестирования: {e}")
+        return []
+
 def get_user_test_history(user_id: int, test_id: int) -> List[Dict]:
-    """История прохождений конкретного теста"""
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = dict_factory
-    cursor = conn.cursor()
+    """Получает историю прохождений конкретного теста"""
+    if not SQLITE_AVAILABLE:
+        return []
     
-    cursor.execute("""
-        SELECT * FROM test_attempts 
-        WHERE user_id = ? AND test_id = ?
-        ORDER BY completed_at DESC
-    """, (user_id, test_id))
-    
-    history = cursor.fetchall()
-    conn.close()
-    return history
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = dict_factory
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT * FROM test_attempts 
+            WHERE user_id = ? AND test_id = ?
+            ORDER BY completed_at DESC
+        """, (user_id, test_id))
+        
+        history = cursor.fetchall()
+        conn.close()
+        return history
+    except Exception as e:
+        print(f"Ошибка при получении истории тестирования: {e}")
+        return []
 
 def get_leaderboard(test_id: int, limit: int = 10) -> List[Dict]:
     """Таблица лидеров для теста"""
