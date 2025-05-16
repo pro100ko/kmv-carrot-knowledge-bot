@@ -7,6 +7,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.filters.command import Command, CommandStart
 import asyncio
 from aiohttp import web
+from aiogram import Bot
 
 # Импортируем настройки
 from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH
@@ -127,6 +128,18 @@ async def search_command(message: types.Message):
 async def search_query_command(message: types.Message):
     from handlers.knowledge_base import search_handler
     await search_handler(message, None)
+
+async def on_startup(bot: Bot) -> None:
+    """Действия при запуске бота"""
+    # Устанавливаем вебхук
+    await bot.set_webhook(url=WEBHOOK_URL)
+    logger.info(f"Webhook установлен на {WEBHOOK_URL}")
+
+async def on_shutdown(bot: Bot) -> None:
+    """Действия при выключении бота"""
+    # Удаляем вебхук
+    await bot.delete_webhook()
+    logger.info("Webhook удалён")
 
 async def main() -> None:
     """Запуск бота"""
