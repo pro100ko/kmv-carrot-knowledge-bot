@@ -2,7 +2,7 @@
 from aiogram import types
 from aiogram.enums import ParseMode
 
-import sqlite_db import (
+from sqlite_db import (
     get_tests_list,
     get_test,
     save_test_attempt
