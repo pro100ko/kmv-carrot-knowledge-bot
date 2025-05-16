@@ -231,3 +231,16 @@ async def test_result_handler(update: types.CallbackQuery, context=None) -> None
         parse_mode=ParseMode.HTML,
         reply_markup=get_test_result_keyboard()
     )
+
+async def handle_no_tests(update):
+    if isinstance(update, types.CallbackQuery):
+        await update.message.answer("Нет доступных тестов.")
+    else:
+        await update.answer("Нет доступных тестов.")
+
+async def handle_error(update, error):
+    logger.error(f"Error in testing handler: {error}")
+    if isinstance(update, types.CallbackQuery):
+        await update.message.answer("Произошла ошибка при обработке теста.")
+    else:
+        await update.answer("Произошла ошибка при обработке теста.")
