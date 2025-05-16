@@ -41,94 +41,92 @@ except Exception as e:
     logger.error("Бот не может работать без базы данных")
     sys.exit(1)
 
-# Импортируем обработчики
-from handlers.user_management import register_user_handler, start
-from handlers.knowledge_base import knowledge_base_handler, category_handler, product_handler, search_handler
-from handlers.testing import testing_handler, test_selection_handler, test_question_handler, test_result_handler
-from handlers.admin import admin_handler, admin_categories_handler, admin_products_handler, admin_tests_handler, admin_stats_handler
-
-# Регистрируем обработчики
+# Обработчик команды /start и /help
 @dp.message(CommandStart())
 @dp.message(Command("help"))
 async def start_command(message: types.Message):
+    from handlers.user_management import start
     await start(message, None)
+
+# Обработчик для прочих сообщений
+@dp.message()
+async def any_message(message: types.Message):
+    from handlers.user_management import register_user_handler
+    await register_user_handler(message, None)
 
 # Колбэки для базы знаний
 @dp.callback_query(F.data == "knowledge_base")
 async def kb_callback(callback_query: types.CallbackQuery):
+    from handlers.knowledge_base import knowledge_base_handler
     await knowledge_base_handler(callback_query, None)
 
 @dp.callback_query(F.data.startswith("category:"))
 async def cat_callback(callback_query: types.CallbackQuery):
+    from handlers.knowledge_base import category_handler
     await category_handler(callback_query, None)
 
 @dp.callback_query(F.data.startswith("product:"))
 async def prod_callback(callback_query: types.CallbackQuery):
+    from handlers.knowledge_base import product_handler
     await product_handler(callback_query, None)
 
 # Колбэки для тестирования
 @dp.callback_query(F.data == "testing")
 async def testing_callback(callback_query: types.CallbackQuery):
+    from handlers.testing import testing_handler
     await testing_handler(callback_query, None)
 
 @dp.callback_query(F.data.startswith("test_select:"))
 async def test_select_callback(callback_query: types.CallbackQuery):
+    from handlers.testing import test_selection_handler
     await test_selection_handler(callback_query, None)
 
 @dp.callback_query(F.data.startswith("test_answer:"))
 async def test_answer_callback(callback_query: types.CallbackQuery):
+    from handlers.testing import test_question_handler
     await test_question_handler(callback_query, None)
 
 @dp.callback_query(F.data.startswith("test_result:"))
 async def test_result_callback(callback_query: types.CallbackQuery):
+    from handlers.testing import test_result_handler
     await test_result_handler(callback_query, None)
 
 # Колбэки для админки
 @dp.callback_query(F.data == "admin")
 async def admin_callback(callback_query: types.CallbackQuery):
+    from handlers.admin import admin_handler
     await admin_handler(callback_query, None)
 
 @dp.callback_query(F.data.startswith("admin_categories"))
 async def admin_cat_callback(callback_query: types.CallbackQuery):
+    from handlers.admin import admin_categories_handler
     await admin_categories_handler(callback_query, None)
 
 @dp.callback_query(F.data.startswith("admin_products"))
 async def admin_prod_callback(callback_query: types.CallbackQuery):
+    from handlers.admin import admin_products_handler
     await admin_products_handler(callback_query, None)
 
 @dp.callback_query(F.data.startswith("admin_tests"))
 async def admin_test_callback(callback_query: types.CallbackQuery):
+    from handlers.admin import admin_tests_handler
     await admin_tests_handler(callback_query, None)
 
 @dp.callback_query(F.data.startswith("admin_stats"))
 async def admin_stats_callback(callback_query: types.CallbackQuery):
+    from handlers.admin import admin_stats_handler
     await admin_stats_handler(callback_query, None)
 
 # Обработчики для текстовых сообщений
 @dp.message(F.text == "🔍 Поиск")
 async def search_command(message: types.Message):
+    from handlers.knowledge_base import search_handler
     await search_handler(message, None)
 
 @dp.message(F.text.startswith("🔍 "))
 async def search_query_command(message: types.Message):
+    from handlers.knowledge_base import search_handler
     await search_handler(message, None)
-
-# Обработчик для прочих сообщений
-@dp.message()
-async def any_message(message: types.Message):
-    await register_user_handler(message, None)
-
-async def on_startup(bot: Bot) -> None:
-    """Действия при запуске бота"""
-    # Устанавливаем вебхук
-    await bot.set_webhook(url=WEBHOOK_URL)
-    logger.info(f"Webhook установлен на {WEBHOOK_URL}")
-
-async def on_shutdown(bot: Bot) -> None:
-    """Действия при выключении бота"""
-    # Удаляем вебхук
-    await bot.delete_webhook()
-    logger.info("Webhook удалён")
 
 async def main() -> None:
     """Запуск бота"""
