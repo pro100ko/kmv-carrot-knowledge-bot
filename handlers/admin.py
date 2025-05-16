@@ -80,7 +80,7 @@ async def admin_categories_handler(update: types.CallbackQuery, context=None) ->
     await query.answer()
     
     # Получаем категории из Firebase
-    categories = firebase_db.get_categories()
+    categories = get_categories()
     
     # Отображаем список категорий для управления
     await query.message.edit_text(
@@ -116,7 +116,7 @@ async def admin_products_handler(update: types.CallbackQuery, context=None) -> N
         )
     else:
         # Это основная страница управления товарами, отображаем список категорий
-        categories = firebase_db.get_categories()
+        categories = get_categories()
         
         await query.message.edit_text(
             text="🍎 <b>Управление товарами</b>\n\nВыберите категорию товаров:",
@@ -130,7 +130,7 @@ async def admin_tests_handler(update: types.CallbackQuery, context=None) -> None
     await query.answer()
     
     # Получаем список всех тестов
-    tests = firebase_db.get_tests_list()
+    tests = get_tests_list()
     
     await query.message.edit_text(
         text="📝 <b>Управление тестами</b>\n\nВыберите тест для редактирования или создайте новый:",
