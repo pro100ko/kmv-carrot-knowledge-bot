@@ -20,23 +20,15 @@ async def testing_handler(update: types.Message | types.CallbackQuery, context=N
     try:
         tests = get_tests_list()
         if not tests:
-            error_msg = "Тесты временно недоступны"
-            if isinstance(update, types.CallbackQuery):
-                await update.message.edit_text(error_msg)
-            else:
-                await update.answer(error_msg)
+            await handle_no_tests(update)
             return
 
-if isinstance(update, types.CallbackQuery):
+        if isinstance(update, types.CallbackQuery):
             await handle_callback_testing(update, tests)
         else:
             await handle_message_testing(update, tests)
     except Exception as e:
-        error_msg = f"Ошибка: {str(e)}"
-        if isinstance(update, types.CallbackQuery):
-            await update.message.edit_text(error_msg)
-        else:
-            await update.answer(error_msg)
+        await handle_error(update, e)
 
 async def test_selection_handler(update: types.CallbackQuery, context=None) -> None:
     """Обработчик для выбора теста"""
