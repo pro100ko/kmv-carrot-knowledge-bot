@@ -15,8 +15,8 @@ user_test_sessions = {}
 async def testing_handler(update: types.Message | types.CallbackQuery, context=None) -> None:
     """Обработчик для системы тестирования"""
     # Получаем доступные тесты из Firebase
-from sqlite_db import get_quiz_tests
-tests = await get_quiz_tests()
+from sqlite_db import gget_tests_list
+tests = get_tests_list()
     
 if isinstance(update, types.CallbackQuery):
         query = update
