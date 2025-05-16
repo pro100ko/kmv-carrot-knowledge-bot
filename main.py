@@ -27,6 +27,14 @@ bot = Bot(
 )
 dp = Dispatcher()  # Создаем экземпляр диспетчера
 
+from handlers.admin import (
+    admin_handler,
+    admin_categories_handler,
+    admin_products_handler,
+    create_category_handler,
+    create_product_handler
+)
+
 # Инициализация SQLite
 sqlite_initialized = False
 try:
