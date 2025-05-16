@@ -90,6 +90,19 @@ async def admin_categories_handler(update: types.CallbackQuery, context=None) ->
         reply_markup=get_admin_categories_keyboard(categories)
     )
 
+@dp.callback_query(F.data == "create_category")
+async def create_category_handler(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(CategoryForm.name)
+    await callback.message.edit_text(
+        "Введите название новой категории:",
+        reply_markup=types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [types.InlineKeyboardButton(text="Отмена", callback_data="cancel_create")]
+            ]
+        )
+    )
+
 async def admin_products_handler(update: types.CallbackQuery, context=None) -> None:
     """Обработчик для управления товарами"""
     query = update
