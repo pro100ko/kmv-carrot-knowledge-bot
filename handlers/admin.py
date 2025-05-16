@@ -4,7 +4,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-import sqlite_db import (
+from sqlite_db import (
     add_test,
     get_categories,
     add_category,
