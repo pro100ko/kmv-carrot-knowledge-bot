@@ -106,7 +106,7 @@ async def admin_products_handler(update: types.CallbackQuery, context=None) -> N
         products = firebase_db.get_products_by_category(category_id)
         
         # Получаем информацию о категории
-        categories = firebase_db.get_categories()
+        categories = get_categories()
         category = next((c for c in categories if c['id'] == category_id), None)
         category_name = category['name'] if category else "Категория"
         
