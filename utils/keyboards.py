@@ -167,6 +167,11 @@ def get_admin_products_keyboard(categories: List[Dict]) -> types.InlineKeyboardM
         types.InlineKeyboardButton(text="🔙 Назад", callback_data="admin")
     ])
     
+    # Создать товар
+    buttons.append([types.InlineKeyboardButton(
+        text="➕ Создать товар", 
+        callback_data="create_product"
+    )])
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_admin_products_list_keyboard(products: List[Dict], category_id: str) -> types.InlineKeyboardMarkup:
