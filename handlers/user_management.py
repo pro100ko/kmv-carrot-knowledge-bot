@@ -2,7 +2,7 @@
 from aiogram import types
 from aiogram.enums import ParseMode
 
-import sqlite_db import get_test_attempts
+from sqlite_db import get_test_attempts
 from config import ADMIN_IDS
 from utils.keyboards import get_main_keyboard
 
