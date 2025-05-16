@@ -11,13 +11,6 @@ from sqlite_db import (
     get_products_by_category,
     get_tests_list
 )
-from handlers.admin import (
-    admin_handler,
-    admin_categories_handler,
-    admin_products_handler,
-    create_category_handler,
-    create_product_handler
-)
 from config import ADMIN_IDS
 from utils.keyboards import get_admin_keyboard, get_admin_categories_keyboard, get_admin_products_keyboard, get_admin_products_list_keyboard, get_admin_tests_keyboard, get_admin_stats_keyboard
 
