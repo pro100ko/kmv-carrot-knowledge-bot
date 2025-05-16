@@ -2,7 +2,7 @@
 from aiogram import types
 from aiogram.enums import ParseMode
 
-import sqlite_db
+import sqlite_db import get_tests_list
 from utils.keyboards import get_tests_keyboard, get_test_question_keyboard, get_test_result_keyboard
 
 # Глобальный словарь для хранения текущих тестовых сессий пользователей
