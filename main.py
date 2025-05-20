@@ -8,6 +8,8 @@ from aiogram.filters.command import Command, CommandStart
 import asyncio
 from aiohttp import web
 from aiogram import Bot
+from dispatcher import dp  # Импортируем dp
+from handlers import admin  # Импортируем обработчики после инициализации dp
 
 # Импортируем настройки
 from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH
