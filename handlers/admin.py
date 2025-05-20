@@ -1,5 +1,5 @@
 
-from aiogram import types
+from aiogram import F, types
 from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -13,6 +13,8 @@ from sqlite_db import (
 )
 from config import ADMIN_IDS
 from utils.keyboards import get_admin_keyboard, get_admin_categories_keyboard, get_admin_products_keyboard, get_admin_products_list_keyboard, get_admin_tests_keyboard, get_admin_stats_keyboard
+from dispatcher import dp  # Импортируем dp из отдельного файла
+from states import CategoryForm  # Импортируем состояния из отдельного файла
 
 # Определяем состояния для FSM
 class CategoryForm(StatesGroup):
