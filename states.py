@@ -1,4 +1,4 @@
-# states.py
+
 from aiogram.fsm.state import StatesGroup, State
 
 class CategoryForm(StatesGroup):
@@ -14,3 +14,10 @@ class ProductForm(StatesGroup):
     storage = State()
     images = State()
     video = State()
+
+class TestForm(StatesGroup):
+    title = State()
+    description = State()
+    category = State()
+    questions = State()
+    passing_score = State()
