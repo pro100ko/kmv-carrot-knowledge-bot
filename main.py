@@ -11,10 +11,6 @@ from aiogram import Bot
 from dispatcher import dp  # Импортируем dp
 from handlers import admin, knowledge_base, testing  # Импортируем обработчики после инициализации dp
 
-dp.include_router(admin.router)
-dp.include_router(knowledge_base.router)
-dp.include_router(testing.router)
-
 # Импортируем настройки
 from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH
 
