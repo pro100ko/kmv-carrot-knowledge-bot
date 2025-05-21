@@ -190,3 +190,10 @@ if __name__ == '__main__':
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("Бот остановлен")
+
+@dp.update()
+async def unhandled_update_handler(update: types.Update):
+    logger.warning(f"Unhandled update: {update}")
+    # Можно добавить отправку сообщения пользователю
+    if update.message:
+        await update.message.answer("Извините, я не понял эту команду")
