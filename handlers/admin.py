@@ -222,3 +222,10 @@ async def admin_stats_handler(update: types.CallbackQuery, context=None) -> None
             parse_mode=ParseMode.HTML,
             reply_markup=get_admin_stats_keyboard()
         )
+        
+__all__ = [
+    'admin_handler',
+    'create_category_handler',
+    'create_product_handler',  # Добавляем новый обработчик
+    # другие экспортируемые обработчики
+]
