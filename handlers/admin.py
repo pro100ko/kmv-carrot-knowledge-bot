@@ -167,6 +167,7 @@ async def admin_tests_handler(update: types.CallbackQuery, context=None) -> None
         text="📝 <b>Управление тестами</b>\n\nВыберите тест для редактирования или создайте новый:",
         parse_mode=ParseMode.HTML,
         reply_markup=get_admin_tests_keyboard(tests)
+        inline_message_id=str(uuid.uuid4())
     )
 
 async def admin_stats_handler(update: types.CallbackQuery, context=None) -> None:
