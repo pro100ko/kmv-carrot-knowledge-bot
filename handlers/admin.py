@@ -1,5 +1,5 @@
 
-from aiogram import F, types
+from aiogram import F, types, uuid
 from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -166,7 +166,7 @@ async def admin_tests_handler(update: types.CallbackQuery, context=None) -> None
     await query.message.edit_text(
         text="📝 <b>Управление тестами</b>\n\nВыберите тест для редактирования или создайте новый:",
         parse_mode=ParseMode.HTML,
-        reply_markup=get_admin_tests_keyboard(tests)
+        reply_markup=get_admin_tests_keyboard(tests),
         inline_message_id=str(uuid.uuid4())
     )
 
