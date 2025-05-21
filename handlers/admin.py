@@ -15,6 +15,8 @@ from config import ADMIN_IDS
 from utils.keyboards import get_admin_keyboard, get_admin_categories_keyboard, get_admin_products_keyboard, get_admin_products_list_keyboard, get_admin_tests_keyboard, get_admin_stats_keyboard
 from dispatcher import dp  # Импортируем dp из отдельного файла
 from states import CategoryForm  # Импортируем состояния из отдельного файла
+from states import ProductForm  # Импортируем состояния товаров
+from states import TestForm
 
 # Определяем состояния для FSM
 class CategoryForm(StatesGroup):
@@ -139,6 +141,19 @@ async def admin_products_handler(update: types.CallbackQuery, context=None) -> N
             parse_mode=ParseMode.HTML,
             reply_markup=get_admin_products_keyboard(categories)
         )
+
+@dp.callback_query(F.data == "create_product")
+async def create_product_handler(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(ProductForm.name)
+    await callback.message.edit_text(
+        "Введите название нового товара:",
+        reply_markup=types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [types.InlineKeyboardButton(text="Отмена", callback_data="cancel_creation")]
+            ]
+        )
+    )
 
 async def admin_tests_handler(update: types.CallbackQuery, context=None) -> None:
     """Обработчик для управления тестами"""
