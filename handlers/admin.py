@@ -163,7 +163,7 @@ async def admin_stats_handler(update: types.CallbackQuery, context=None) -> None
     
     if len(parts) > 2 and parts[2] == 'users':
         # Статистика пользователей
-        users = firebase_db.get_all_users()
+        users = sqlite_db.get_all_users()
         
         stats_text = "👥 <b>Статистика пользователей</b>\n\n"
         stats_text += f"Всего пользователей: {len(users)}\n"
