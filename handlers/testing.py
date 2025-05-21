@@ -1,4 +1,5 @@
 
+import logging
 from aiogram import types
 from aiogram.enums import ParseMode
 from sqlite_db import (
@@ -40,6 +41,9 @@ async def test_selection_handler(update: types.CallbackQuery, context=None) -> N
     
     # Получаем информацию о тесте
     test = get_test(test_id)
+
+    # Получаем логгер
+    logger = logging.getLogger(__name__)
     
     if not test:
         await query.message.edit_text(
@@ -192,6 +196,9 @@ async def test_result_handler(update: types.CallbackQuery, context=None) -> None
         return
     
     session = user_test_sessions[user_id]
+    
+# Получаем ID теста из сессии пользователя
+    test_id = session.get('test_id')
     
     # Получаем информацию о тесте
     test = get_test(test_id)
