@@ -9,7 +9,11 @@ import asyncio
 from aiohttp import web
 from aiogram import Bot
 from dispatcher import dp  # Импортируем dp
-from handlers import admin  # Импортируем обработчики после инициализации dp
+from handlers import admin, knowledge_base, testing  # Импортируем обработчики после инициализации dp
+
+dp.include_router(admin.router)
+dp.include_router(knowledge_base.router)
+dp.include_router(testing.router)
 
 # Импортируем настройки
 from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH
@@ -128,6 +132,11 @@ async def admin_stats_callback(callback_query: types.CallbackQuery):
     from handlers.admin import admin_stats_handler
     await admin_stats_handler(callback_query, None)
 
+@dp.callback_query()
+async def log_callback_queries(callback: types.CallbackQuery):
+    logger.info(f"Received callback: {callback.data}")
+    await callback.answer()  # Важно для предотвращения "часиков" в интерфейсе
+
 # Обработчики для текстовых сообщений
 @dp.message(F.text == "🔍 Поиск")
 async def search_command(message: types.Message):
@@ -197,3 +206,16 @@ async def unhandled_update_handler(update: types.Update):
     # Можно добавить отправку сообщения пользователю
     if update.message:
         await update.message.answer("Извините, я не понял эту команду")
+
+@dp.errors()
+async def errors_handler(update: types.Update, exception: Exception):
+    logger.error(f"Update {update} caused error: {exception}")
+    return True  # Подавляем ошибку
+
+@dp.middleware()
+async def timing_middleware(handler, event, data):
+    start = time.time()
+    try:
+        return await handler(event, data)
+    finally:
+        logging.info(f"Handler {handler.__name__} executed in {time.time()-start:.3f}s")
