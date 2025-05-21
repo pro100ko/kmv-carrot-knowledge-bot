@@ -1,5 +1,6 @@
 
-from aiogram import F, types, uuid
+from aiogram import F, types
+import uuid
 from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
