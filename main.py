@@ -3,6 +3,7 @@ import os
 import sys
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters.command import Command, CommandStart
 import asyncio
@@ -155,6 +156,14 @@ async def on_shutdown(bot: Bot) -> None:
     # Удаляем вебхук
     await bot.delete_webhook()
     logger.info("Webhook удалён")
+
+async def on_telegram_error(update, exception):
+    if isinstance(exception, TelegramBadRequest) and "message is not modified" in str(exception):
+        return True  # Игнорируем ошибку
+    raise exception
+
+dp = Dispatcher()
+dp.errors.register(on_telegram_error)
 
 async def main() -> None:
     """Запуск бота"""
