@@ -28,7 +28,6 @@ bot = Bot(
     token=BOT_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
-dp = Dispatcher()  # Создаем экземпляр диспетчера
 
 from handlers.admin import (
     admin_handler,
@@ -162,14 +161,21 @@ async def on_telegram_error(update, exception):
         return True  # Игнорируем ошибку
     raise exception
 
-dp = Dispatcher()
 dp.errors.register(on_telegram_error)
+
+@dp.update()
+async def unhandled_update_handler(update: types.Update):
+    logger.warning(f"Unhandled update: {update}")
+    # Можно добавить отправку сообщения пользователю
+    if update.message:
+        await update.message.answer("Извините, я не понял эту команду")
 
 async def main() -> None:
     """Запуск бота"""
     if os.environ.get("ENVIRONMENT") == "production":
         # В режиме production используем webhook
         # Создаем приложение aiohttp
+        await bot.set_webhook(WEBHOOK_URL)
         app = web.Application()
         
         # Настраиваем вебхук (используем новый API aiogram 3.x)
@@ -195,22 +201,14 @@ async def main() -> None:
         # Используем await для правильного запуска web-приложения
         return await web._run_app(app, host="0.0.0.0", port=port)
     else:
-        # В режиме разработки используем polling
-        await dp.start_polling(bot, on_startup=on_startup, on_shutdown=on_shutdown)
-        logger.info("Бот запущен в режиме polling")
+        await bot.delete_webhook()
+        await dp.start_polling(bot)
 
 if __name__ == '__main__':
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("Бот остановлен")
-
-@dp.update()
-async def unhandled_update_handler(update: types.Update):
-    logger.warning(f"Unhandled update: {update}")
-    # Можно добавить отправку сообщения пользователю
-    if update.message:
-        await update.message.answer("Извините, я не понял эту команду")
 
 @dp.errors()
 async def errors_handler(update: types.Update, exception: Exception):
