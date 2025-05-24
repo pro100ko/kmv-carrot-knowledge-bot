@@ -1,23 +1,29 @@
 
 from aiogram import F, types
 import uuid
+import logging
 from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.exceptions import TelegramBadRequest
+
 from utils.message_utils import safe_edit_message
 from sqlite_db import (
-    add_test,
-    get_categories,
-    add_category,
-    get_products_by_category,
-    get_tests_list
+    add_test, get_categories, add_category,
+    get_products_by_category, get_tests_list,
+    search_products
 )
 from config import ADMIN_IDS
-from utils.keyboards import get_admin_keyboard, get_admin_categories_keyboard, get_admin_products_keyboard, get_admin_products_list_keyboard, get_admin_tests_keyboard, get_admin_stats_keyboard
-from dispatcher import dp  # Импортируем dp из отдельного файла
-from states import CategoryForm  # Импортируем состояния из отдельного файла
-from states import ProductForm  # Импортируем состояния товаров
-from states import TestForm
+from utils.keyboards import (
+    get_admin_keyboard, get_admin_categories_keyboard,
+    get_admin_products_keyboard, get_admin_products_list_keyboard,
+    get_admin_tests_keyboard, get_admin_stats_keyboard,
+    get_cancel_keyboard
+)
+from dispatcher import dp
+from states import CategoryForm, ProductForm, TestForm
+
+logger = logging.getLogger(__name__)
 
 # Определяем состояния для FSM
 class CategoryForm(StatesGroup):
@@ -41,193 +47,271 @@ class TestForm(StatesGroup):
     questions = State()
     passing_score = State()
 
-# Глобальные данные для административных операций
-admin_data = {}
-
-async def admin_handler(update: types.Message | types.CallbackQuery, context=None) -> None:
-    """Обработчик для административной панели"""
-    if isinstance(update, types.CallbackQuery):
-        query = update
-        user_id = query.from_user.id
-    else:
-        query = None
-        user_id = update.from_user.id
-    
-    # Проверяем, является ли пользователь администратором
+# ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
+async def check_admin_access(user_id: int, query: types.CallbackQuery = None) -> bool:
+    """Проверяет права администратора"""
     if user_id not in ADMIN_IDS:
+        msg = "⛔ У вас нет доступа к административной панели"
         if query:
-            await query.answer("У вас нет доступа к административной панели.")
-            return
-        else:
-            await update.answer("У вас нет доступа к административной панели.")
-            return
-    
-    # Отображаем админ-панель
-    admin_text = "🔧 <b>Административная панель</b>\n\n"
-    admin_text += "Выберите раздел для управления:"
-    
-    if query:
-        await query.answer()
-        await query.message.edit_text(
-            text=admin_text,
+            await query.answer(msg)
+        return False
+    return True
+
+async def send_admin_menu(
+    target: types.Message | types.CallbackQuery,
+    text: str = "🔧 <b>Административная панель</b>\n\nВыберите раздел для управления:"
+) -> None:
+    """Отправляет/обновляет меню админки"""
+    if isinstance(target, types.CallbackQuery):
+        await target.answer()
+        await safe_edit_message(
+            message=target.message,
+            text=text,
             parse_mode=ParseMode.HTML,
             reply_markup=get_admin_keyboard()
         )
     else:
-        await update.answer(
-            text=admin_text,
+        await target.answer(
+            text=text,
             parse_mode=ParseMode.HTML,
             reply_markup=get_admin_keyboard()
         )
 
-async def admin_categories_handler(update: types.CallbackQuery, context=None) -> None:
-    """Обработчик для управления категориями"""
-    query = update
-    await query.answer()
+# ===== ОСНОВНЫЕ ОБРАБОТЧИКИ =====
+@dp.message(Command("admin"))
+@dp.callback_query(F.data == "admin"))
+async def admin_handler(
+    update: types.Message | types.CallbackQuery,
+    state: FSMContext
+) -> None:
+    """Главное меню админки"""
+    user_id = update.from_user.id
+    if not await check_admin_access(user_id, update if isinstance(update, types.CallbackQuery) else None):
+        return
     
-    # Получаем категории из Firebase
+    await state.clear()
+    await send_admin_menu(update)
+
+# ===== КАТЕГОРИИ =====
+@dp.callback_query(F.data == "admin_categories"))
+async def admin_categories_handler(
+    query: types.CallbackQuery,
+    state: FSMContext
+) -> None:
+    """Управление категориями"""
+    if not await check_admin_access(query.from_user.id, query):
+        return
+    
+    await state.clear()
     categories = get_categories()
     
-    # Используем безопасное редактирование
     await safe_edit_message(
         message=query.message,
         text="📂 <b>Управление категориями</b>\n\nВыберите категорию для редактирования или создайте новую:",
+        parse_mode=ParseMode.HTML,
         reply_markup=get_admin_categories_keyboard(categories)
     )
 
-@dp.callback_query(F.data == "create_category")
-async def create_category_handler(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
+@dp.callback_query(F.data == "create_category"))
+async def create_category_handler(
+    callback: types.CallbackQuery,
+    state: FSMContext
+) -> None:
+    """Создание новой категории"""
+    if not await check_admin_access(callback.from_user.id, callback):
+        return
+    
     await state.set_state(CategoryForm.name)
-    await callback.message.edit_text(
-        "Введите название новой категории:",
-        reply_markup=types.InlineKeyboardMarkup(
-            inline_keyboard=[
-                [types.InlineKeyboardButton(text="Отмена", callback_data="cancel_create")]
-            ]
-        )
+    await safe_edit_message(
+        message=callback.message,
+        text="✏️ Введите название новой категории:",
+        reply_markup=get_cancel_keyboard("cancel_category_creation")
     )
 
-async def admin_products_handler(update: types.CallbackQuery, context=None) -> None:
-    """Обработчик для управления товарами"""
-    query = update
-    await query.answer()
+# ===== ТОВАРЫ =====
+@dp.callback_query(F.data.startswith("admin_products"))
+async def admin_products_handler(
+    query: types.CallbackQuery,
+    state: FSMContext
+) -> None:
+    """Управление товарами"""
+    if not await check_admin_access(query.from_user.id, query):
+        return
     
-    # Проверяем, это выбор категории или возврат из категории
+    await state.clear()
     parts = query.data.split(':')
     
     if len(parts) > 1 and parts[0] == 'admin_products_category':
-        # Это выбор категории, отображаем товары для этой категории
+        # Показ товаров конкретной категории
         category_id = parts[1]
-        
-        # Получаем список товаров для этой категории
         products = get_products_by_category(category_id)
+        category = next((c for c in get_categories() if c['id'] == category_id), None)
         
-        # Получаем информацию о категории
-        categories = get_categories()
-        category = next((c for c in categories if c['id'] == category_id), None)
-        category_name = category['name'] if category else "Категория"
+        text = (
+            f"🍎 <b>Управление товарами</b>\n\n"
+            f"Категория: {category['name'] if category else 'Неизвестная'}\n\n"
+            f"Выберите товар для редактирования или создайте новый:"
+        )
         
-        await query.message.edit_text(
-            text=f"🍎 <b>Управление товарами</b>\n\nКатегория: {category_name}\n\nВыберите товар для редактирования или создайте новый:",
+        await safe_edit_message(
+            message=query.message,
+            text=text,
             parse_mode=ParseMode.HTML,
             reply_markup=get_admin_products_list_keyboard(products, category_id)
         )
     else:
-        # Это основная страница управления товарами, отображаем список категорий
+        # Главное меню товаров
         categories = get_categories()
-        
-        await query.message.edit_text(
+        await safe_edit_message(
+            message=query.message,
             text="🍎 <b>Управление товарами</b>\n\nВыберите категорию товаров:",
             parse_mode=ParseMode.HTML,
             reply_markup=get_admin_products_keyboard(categories)
         )
 
-@dp.callback_query(F.data == "create_product")
-async def create_product_handler(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
+@dp.callback_query(F.data == "create_product"))
+async def create_product_handler(
+    callback: types.CallbackQuery,
+    state: FSMContext
+) -> None:
+    """Создание нового товара"""
+    if not await check_admin_access(callback.from_user.id, callback):
+        return
+    
     await state.set_state(ProductForm.name)
-    await callback.message.edit_text(
-        "Введите название нового товара:",
-        reply_markup=types.InlineKeyboardMarkup(
-            inline_keyboard=[
-                [types.InlineKeyboardButton(text="Отмена", callback_data="cancel_creation")]
-            ]
-        )
+    await safe_edit_message(
+        message=callback.message,
+        text="✏️ Введите название нового товара:",
+        reply_markup=get_cancel_keyboard("cancel_product_creation")
     )
 
-async def admin_tests_handler(update: types.CallbackQuery, context=None) -> None:
-    """Обработчик для управления тестами"""
-    query = update
-    await query.answer()
+# ===== ТЕСТЫ =====
+@dp.callback_query(F.data == "admin_tests"))
+async def admin_tests_handler(
+    query: types.CallbackQuery,
+    state: FSMContext
+) -> None:
+    """Управление тестами"""
+    if not await check_admin_access(query.from_user.id, query):
+        return
     
-    # Получаем список всех тестов
+    await state.clear()
     tests = get_tests_list()
     
-    await query.message.edit_text(
+    await safe_edit_message(
+        message=query.message,
         text="📝 <b>Управление тестами</b>\n\nВыберите тест для редактирования или создайте новый:",
         parse_mode=ParseMode.HTML,
         reply_markup=get_admin_tests_keyboard(tests),
         inline_message_id=str(uuid.uuid4())
     )
 
-async def admin_stats_handler(update: types.CallbackQuery, context=None) -> None:
-    """Обработчик для просмотра статистики"""
-    query = update
-    await query.answer()
+# ===== СТАТИСТИКА =====
+@dp.callback_query(F.data.startswith("admin_stats"))
+async def admin_stats_handler(
+    query: types.CallbackQuery,
+    state: FSMContext
+) -> None:
+    """Просмотр статистики"""
+    if not await check_admin_access(query.from_user.id, query):
+        return
     
+    await state.clear()
     parts = query.data.split('_')
     
-    if len(parts) > 2 and parts[2] == 'users':
-        # Статистика пользователей
-        users = sqlite_db.get_all_users()
-        
-        stats_text = "👥 <b>Статистика пользователей</b>\n\n"
-        stats_text += f"Всего пользователей: {len(users)}\n"
-        admin_count = sum(1 for user in users if user.get('is_admin'))
-        stats_text += f"Администраторов: {admin_count}\n"
-        stats_text += f"Обычных пользователей: {len(users) - admin_count}\n\n"
-        
-        # Добавляем список последних 10 активных пользователей
-        active_users = sorted(users, key=lambda u: u.get('last_active', 0), reverse=True)[:10]
-        if active_users:
-            stats_text += "<b>Последние активные пользователи:</b>\n"
-            for user in active_users:
-                name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
-                username = f"@{user.get('username')}" if user.get('username') else "без username"
-                stats_text += f"- {name} ({username})\n"
-        
-        await query.message.edit_text(
-            text=stats_text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=get_admin_stats_keyboard()
-        )
-    
-    elif len(parts) > 2 and parts[2] == 'tests':
-        # Статистика тестов
-        # Здесь мы бы получали статистику по тестам, но это требует дополнительной реализации
-        # Вместо этого отображаем заглушку
-        
-        stats_text = "📝 <b>Статистика тестирования</b>\n\n"
-        stats_text += "В разработке. Скоро здесь появится детальная статистика по прохождению тестов.\n"
-        
-        await query.message.edit_text(
-            text=stats_text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=get_admin_stats_keyboard()
-        )
-    
+    if len(parts) > 2:
+        if parts[2] == 'users':
+            # Статистика пользователей
+            users = get_all_users()
+            admin_count = sum(1 for u in users if u.get('is_admin'))
+            
+            text = (
+                "👥 <b>Статистика пользователей</b>\n\n"
+                f"Всего пользователей: {len(users)}\n"
+                f"Администраторов: {admin_count}\n"
+                f"Обычных пользователей: {len(users) - admin_count}\n\n"
+                "<i>Детальная статистика в разработке...</i>"
+            )
+        elif parts[2] == 'tests':
+            # Статистика тестов
+            text = (
+                "📝 <b>Статистика тестирования</b>\n\n"
+                "<i>Функционал в разработке...</i>"
+            )
+        else:
+            text = "📊 <b>Статистика</b>\n\nВыберите тип статистики:"
     else:
-        # Основная страница статистики
-        await query.message.edit_text(
-            text="📊 <b>Статистика</b>\n\nВыберите тип статистики для просмотра:",
-            parse_mode=ParseMode.HTML,
-            reply_markup=get_admin_stats_keyboard()
-        )
-        
+        text = "📊 <b>Статистика</b>\n\nВыберите тип статистики:"
+    
+    await safe_edit_message(
+        message=query.message,
+        text=text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_admin_stats_keyboard()
+    )
+
+# ===== ПОИСК ТОВАРОВ =====
+@dp.callback_query(F.data == "admin_search_products"))
+async def admin_search_products_handler(
+    query: types.CallbackQuery,
+    state: FSMContext
+) -> None:
+    """Поиск товаров в админке"""
+    if not await check_admin_access(query.from_user.id, query):
+        return
+    
+    await state.set_state(ProductForm.search)
+    await safe_edit_message(
+        message=query.message,
+        text="🔍 Введите название товара для поиска:",
+        reply_markup=get_cancel_keyboard("cancel_search")
+    )
+
+@dp.message(ProductForm.search)
+async def process_product_search(
+    message: types.Message,
+    state: FSMContext
+) -> None:
+    """Обработка поискового запроса"""
+    search_query = message.text.strip()
+    if len(search_query) < 2:
+        await message.answer("❌ Слишком короткий поисковый запрос (минимум 2 символа)")
+        return
+    
+    products = search_products(search_query)
+    
+    if not products:
+        await message.answer("🔎 Товары не найдены")
+        return
+    
+    text = "🔍 <b>Результаты поиска</b>\n\n"
+    for product in products[:10]:  # Ограничиваем 10 результатами
+        text += f"▪️ {product['name']} (ID: {product['id']})\n"
+    
+    await message.answer(
+        text=text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_admin_products_list_keyboard(products)
+    )
+    await state.clear()
+
+# ===== ОТМЕНА ДЕЙСТВИЙ =====
+@dp.callback_query(F.data.startswith("cancel_"))
+async def cancel_handler(
+    query: types.CallbackQuery,
+    state: FSMContext
+) -> None:
+    """Обработчик отмены действий"""
+    await state.clear()
+    await send_admin_menu(query, "❌ Действие отменено")
+
 __all__ = [
     'admin_handler',
+    'admin_categories_handler',
     'create_category_handler',
-    'create_product_handler',  # Добавляем новый обработчик
-    # другие экспортируемые обработчики
+    'admin_products_handler',
+    'create_product_handler',
+    'admin_tests_handler',
+    'admin_stats_handler',
+    'admin_search_products_handler'
 ]
