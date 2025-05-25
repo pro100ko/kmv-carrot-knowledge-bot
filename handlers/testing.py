@@ -1,253 +1,300 @@
-
 import logging
+from typing import Dict, Optional
 from aiogram import types
 from aiogram.enums import ParseMode
 from sqlite_db import (
     get_tests_list,
     get_test,
-    save_test_attempt
+    save_test_attempt,
+    get_test_attempts
 )
 from utils.keyboards import (
     get_tests_keyboard,
     get_test_question_keyboard,
-    get_test_result_keyboard
+    get_test_result_keyboard,
+    get_back_to_tests_keyboard
 )
+from utils.message_utils import safe_edit_message
+
+logger = logging.getLogger(__name__)
 
 # Глобальный словарь для хранения текущих тестовых сессий пользователей
-user_test_sessions = {}
+user_test_sessions: Dict[int, Dict] = {}
 
-async def testing_handler(update: types.Message | types.CallbackQuery, context=None) -> None:
-    """Обработчик для системы тестирования"""
+class TestSessionManager:
+    """Класс для управления тестовыми сессиями"""
+    
+    @staticmethod
+    def start_session(user_id: int, test_id: str) -> Dict:
+        """Создает новую тестовую сессию"""
+        user_test_sessions[user_id] = {
+            'test_id': test_id,
+            'current_question': 0,
+            'answers': [],
+            'score': 0,
+            'start_time': None  # Можно добавить время начала
+        }
+        return user_test_sessions[user_id]
+    
+    @staticmethod
+    def get_session(user_id: int) -> Optional[Dict]:
+        """Возвращает текущую сессию пользователя"""
+        return user_test_sessions.get(user_id)
+    
+    @staticmethod
+    def end_session(user_id: int) -> None:
+        """Завершает сессию пользователя"""
+        if user_id in user_test_sessions:
+            del user_test_sessions[user_id]
+
+async def testing_handler(
+    update: types.Message | types.CallbackQuery,
+    context=None
+) -> None:
+    """Главный обработчик системы тестирования"""
     try:
         tests = get_tests_list()
         if not tests:
             await handle_no_tests(update)
             return
-
+        
+        text = "📝 <b>Доступные тесты</b>\n\nВыберите тест для прохождения:"
+        keyboard = get_tests_keyboard(tests)
+        
         if isinstance(update, types.CallbackQuery):
-            await handle_callback_testing(update, tests)
+            await safe_edit_message(
+                message=update.message,
+                text=text,
+                reply_markup=keyboard
+            )
+            await update.answer()
         else:
-            await handle_message_testing(update, tests)
+            await update.answer(
+                text=text,
+                reply_markup=keyboard
+            )
+            
     except Exception as e:
-        await handle_error(update, e)
+        logger.error(f"Error in testing handler: {e}")
+        await handle_error(update)
 
-async def test_selection_handler(update: types.CallbackQuery, context=None) -> None:
-    """Обработчик для выбора теста"""
-    query = update
+async def test_selection_handler(
+    query: types.CallbackQuery,
+    context=None
+) -> None:
+    """Обработчик выбора теста"""
     await query.answer()
-    
-    # Получаем ID теста из callback_data
     test_id = query.data.split(':')[1]
-    
-    # Получаем информацию о тесте
     test = get_test(test_id)
-
-    # Получаем логгер
-    logger = logging.getLogger(__name__)
     
     if not test:
-        await query.message.edit_text(
-            text="Тест не найден.",
-            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                [types.InlineKeyboardButton(text="🔙 К списку тестов", callback_data="testing")]
-            ])
+        await safe_edit_message(
+            message=query.message,
+            text="⚠️ Тест не найден",
+            reply_markup=get_back_to_tests_keyboard()
         )
         return
     
-    # Создаем новую тестовую сессию для пользователя
-    user_id = query.from_user.id
-    user_test_sessions[user_id] = {
-        'test_id': test_id,
-        'current_question': 0,
-        'answers': [],
-        'score': 0
-    }
+    # Инициализируем сессию
+    session = TestSessionManager.start_session(query.from_user.id, test_id)
     
-    # Отправляем информацию о тесте
-    test_info = f"<b>{test['title']}</b>\n\n"
-    test_info += f"{test.get('description', '')}\n\n"
-    test_info += f"Тест содержит {len(test['questions'])} вопросов.\n"
-    test_info += f"Для успешного прохождения нужно набрать минимум {test['passing_score']}% правильных ответов.\n\n"
-    test_info += "Нажмите на кнопку ниже, чтобы начать тестирование."
+    # Формируем информацию о тесте
+    test_info = [
+        f"📚 <b>{test['title']}</b>",
+        f"\n\n{test.get('description', '')}",
+        f"\n\n🔢 Количество вопросов: {len(test['questions'])}",
+        f"\n📊 Проходной балл: {test['passing_score']}%",
+        "\n\nНажмите кнопку ниже, чтобы начать тестирование."
+    ]
     
-    await query.message.edit_text(
-        text=test_info,
+    await safe_edit_message(
+        message=query.message,
+        text="".join(test_info),
         parse_mode=ParseMode.HTML,
-        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text="▶️ Начать тестирование", callback_data=f"test_question:{test_id}:start")]
-        ])
+        reply_markup=types.InlineKeyboardMarkup(
+            inline_keyboard=[[
+                types.InlineKeyboardButton(
+                    text="▶️ Начать тест",
+                    callback_data=f"test_question:{test_id}:start"
+                )
+            ]]
+        )
     )
 
-async def test_question_handler(update: types.CallbackQuery, context=None) -> None:
-    """Обработчик для вопросов теста"""
-    query = update
+async def test_question_handler(
+    query: types.CallbackQuery,
+    context=None
+) -> None:
+    """Обработчик вопросов теста"""
     await query.answer()
-    
-    # Получаем информацию из callback_data
+    user_id = query.from_user.id
     parts = query.data.split(':')
     test_id = parts[1]
+    action = parts[2]
     
-    # Получаем пользовательскую сессию
-    user_id = query.from_user.id
-    if user_id not in user_test_sessions:
-        # Если сессии нет, возвращаемся к выбору теста
-        await query.message.edit_text(
-            text="Сессия тестирования истекла. Пожалуйста, начните заново.",
-            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                [types.InlineKeyboardButton(text="🔙 К списку тестов", callback_data="testing")]
-            ])
-        )
+    session = TestSessionManager.get_session(user_id)
+    if not session or session['test_id'] != test_id:
+        await handle_session_expired(query)
         return
     
-    session = user_test_sessions[user_id]
-    
-    # Получаем информацию о тесте
     test = get_test(test_id)
-    
     if not test:
-        await query.message.edit_text(
-            text="Тест не найден.",
-            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                [types.InlineKeyboardButton(text="🔙 К списку тестов", callback_data="testing")]
-            ])
-        )
+        await handle_test_not_found(query)
         return
     
-    # Если это начало теста или ответ на вопрос
-    if parts[2] == 'start':
-        # Начинаем тест с первого вопроса
-        session['current_question'] = 0
-        session['answers'] = []
-    else:
-        # Обрабатываем ответ пользователя
+    # Обработка ответа пользователя
+    if action != 'start':
         question_idx = int(parts[2])
         answer_idx = int(parts[3])
+        correct_idx = test['questions'][question_idx]['correct_option']
         
-        # Проверяем правильность ответа
-        is_correct = (answer_idx == test['questions'][question_idx]['correct_option'])
-        
-        # Сохраняем ответ
         session['answers'].append({
             'question_id': question_idx,
             'selected_option': answer_idx,
-            'is_correct': is_correct
+            'is_correct': answer_idx == correct_idx
         })
         
-        # Увеличиваем счетчик правильных ответов, если ответ верный
-        if is_correct:
+        if answer_idx == correct_idx:
             session['score'] += 1
         
-        # Переходим к следующему вопросу
-        session['current_question'] = question_idx + 1
+        session['current_question'] += 1
     
-    # Проверяем, завершен ли тест
+    # Проверка завершения теста
     if session['current_question'] >= len(test['questions']):
-        # Тест завершен, сохраняем результаты
-        attempt_data = {
-            'user_id': str(user_id),
-            'test_id': test_id,
-            'score': session['score'],
-            'max_score': len(test['questions']),
-            'answers': session['answers'],
-            'completed': True
-        }
-        attempt_id = save_test_attempt(attempt_data)
-        
-        # Перенаправляем к результатам теста
-        await query.message.edit_text(
-            text="Тест завершен. Расчет результатов...",
-            reply_markup=None
-        )
-        
-        await test_result_handler(update, context)
+        await finish_test_session(query, session, test)
         return
     
-    # Отображаем текущий вопрос
-    current_q = test['questions'][session['current_question']]
-    question_text = f"<b>Вопрос {session['current_question']+1} из {len(test['questions'])}</b>\n\n"
-    question_text += current_q['text']
+    # Отображение текущего вопроса
+    question = test['questions'][session['current_question']]
+    question_text = (
+        f"❓ <b>Вопрос {session['current_question']+1}/{len(test['questions'])}</b>\n\n"
+        f"{question['text']}"
+    )
     
-    await query.message.edit_text(
+    await safe_edit_message(
+        message=query.message,
         text=question_text,
         parse_mode=ParseMode.HTML,
         reply_markup=get_test_question_keyboard(
-            session['current_question'], 
-            current_q['options'], 
+            session['current_question'],
+            question['options'],
             test_id
         )
     )
 
-async def test_result_handler(update: types.CallbackQuery, context=None) -> None:
-    """Обработчик для результатов теста"""
-    # Проверяем, это callback или продолжение после завершения теста
-    query = update
-    
-    # Получаем пользовательскую сессию
+async def test_result_handler(
+    query: types.CallbackQuery,
+    context=None
+) -> None:
+    """Обработчик результатов теста"""
+    await query.answer()
     user_id = query.from_user.id
-    if user_id not in user_test_sessions:
-        # Если сессии нет, возвращаемся к выбору теста
-        message_text = "Сессия тестирования истекла. Пожалуйста, начните заново."
-        await query.message.edit_text(
-            text=message_text,
-            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                [types.InlineKeyboardButton(text="🔙 К списку тестов", callback_data="testing")]
-            ])
-        )
+    session = TestSessionManager.get_session(user_id)
+    
+    if not session:
+        await handle_session_expired(query)
         return
     
-    session = user_test_sessions[user_id]
-    
-# Получаем ID теста из сессии пользователя
-    test_id = session.get('test_id')
-    
-    # Получаем информацию о тесте
-    test = get_test(test_id)
-    
+    test = get_test(session['test_id'])
     if not test:
-        message_text = "Информация о тесте не найдена."
-        await query.message.edit_text(
-            text=message_text,
-            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                [types.InlineKeyboardButton(text="🔙 К списку тестов", callback_data="testing")]
-            ])
-        )
+        await handle_test_not_found(query)
         return
     
-    # Рассчитываем результат
     score = session['score']
     max_score = len(test['questions'])
     percentage = (score / max_score) * 100
     passed = percentage >= test['passing_score']
     
-    # Создаем текст с результатами
-    result_text = f"<b>Результаты теста \"{test['title']}\"</b>\n\n"
-    result_text += f"Правильных ответов: {score} из {max_score} ({percentage:.1f}%)\n"
-    result_text += f"Проходной балл: {test['passing_score']}%\n\n"
+    result_text = [
+        f"📊 <b>Результаты теста \"{test['title']}\"</b>",
+        f"\n\n✅ Правильных ответов: {score}/{max_score} ({percentage:.1f}%)",
+        f"\n🎯 Проходной балл: {test['passing_score']}%",
+        "\n\n🎉 <b>Тест пройден!</b>" if passed else "\n\n❌ <b>Тест не пройден</b>"
+    ]
     
-    if passed:
-        result_text += "🎉 <b>Поздравляем! Вы успешно прошли тест.</b>"
-    else:
-        result_text += "❌ <b>К сожалению, тест не пройден.</b> Попробуйте еще раз."
+    # Показ истории попыток
+    attempts = get_test_attempts(user_id, session['test_id'])
+    if attempts:
+        result_text.append("\n\n📅 Ваши предыдущие попытки:")
+        for idx, attempt in enumerate(attempts[:3], 1):  # Показываем последние 3 попытки
+            attempt_percent = (attempt['score'] / attempt['max_score']) * 100
+            result_text.append(
+                f"\n{idx}. {attempt['score']}/{attempt['max_score']} ({attempt_percent:.1f}%) - "
+                f"{'✅' if attempt_percent >= test['passing_score'] else '❌'}"
+            )
     
-    # Очищаем сессию пользователя
-    del user_test_sessions[user_id]
+    TestSessionManager.end_session(user_id)
     
-    # Отправляем результаты
-    await query.message.edit_text(
-        text=result_text,
+    await safe_edit_message(
+        message=query.message,
+        text="".join(result_text),
         parse_mode=ParseMode.HTML,
-        reply_markup=get_test_result_keyboard()
+        reply_markup=get_test_result_keyboard(test_id, passed)
     )
 
-async def handle_no_tests(update):
-    if isinstance(update, types.CallbackQuery):
-        await update.message.answer("Нет доступных тестов.")
-    else:
-        await update.answer("Нет доступных тестов.")
+async def finish_test_session(
+    query: types.CallbackQuery,
+    session: Dict,
+    test: Dict
+) -> None:
+    """Завершает тестовую сессию и сохраняет результаты"""
+    attempt_data = {
+        'user_id': str(query.from_user.id),
+        'test_id': session['test_id'],
+        'score': session['score'],
+        'max_score': len(test['questions']),
+        'answers': session['answers'],
+        'completed': True
+    }
+    
+    if not save_test_attempt(attempt_data):
+        logger.error(f"Failed to save test attempt for user {query.from_user.id}")
+    
+    await safe_edit_message(
+        message=query.message,
+        text="📝 Подсчет результатов...",
+        reply_markup=None
+    )
+    await test_result_handler(query)
 
-async def handle_error(update, error):
-    logger.error(f"Error in testing handler: {error}")
-    if isinstance(update, types.CallbackQuery):
-        await update.message.answer("Произошла ошибка при обработке теста.")
+async def handle_no_tests(target: types.Message | types.CallbackQuery) -> None:
+    """Обработчик отсутствия тестов"""
+    text = "ℹ️ В данный момент нет доступных тестов."
+    if isinstance(target, types.CallbackQuery):
+        await safe_edit_message(
+            message=target.message,
+            text=text,
+            reply_markup=get_back_to_tests_keyboard()
+        )
+        await target.answer()
     else:
-        await update.answer("Произошла ошибка при обработке теста.")
+        await target.answer(text)
+
+async def handle_session_expired(query: types.CallbackQuery) -> None:
+    """Обработчик истекшей сессии"""
+    await safe_edit_message(
+        message=query.message,
+        text="⚠️ Ваша тестовая сессия истекла. Пожалуйста, начните заново.",
+        reply_markup=get_back_to_tests_keyboard()
+    )
+
+async def handle_test_not_found(query: types.CallbackQuery) -> None:
+    """Обработчик отсутствия теста"""
+    await safe_edit_message(
+        message=query.message,
+        text="⚠️ Тест не найден. Возможно, он был удален.",
+        reply_markup=get_back_to_tests_keyboard()
+    )
+
+async def handle_error(target: types.Message | types.CallbackQuery) -> None:
+    """Обработчик ошибок"""
+    text = "⚠️ Произошла ошибка при обработке теста. Пожалуйста, попробуйте позже."
+    if isinstance(target, types.CallbackQuery):
+        await safe_edit_message(
+            message=target.message,
+            text=text,
+            reply_markup=get_back_to_tests_keyboard()
+        )
+        await target.answer()
+    else:
+        await target.answer(text)
