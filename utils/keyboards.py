@@ -1,234 +1,220 @@
-
 from aiogram import types
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
+from enum import Enum
+
+class ButtonType(Enum):
+    """Типы кнопок для унификации"""
+    BACK = "🔙 Назад"
+    BACK_TO_CATEGORIES = "🔙 К категориям"
+    BACK_TO_TESTS = "🔙 К тестам"
+    BACK_TO_MAIN = "🔙 В главное меню"
+    BACK_TO_ADMIN = "🔙 В админку"
+    CREATE = "➕ Создать"
+    NEXT = "➡️"
+    PREV = "⬅️"
+    SEARCH = "🔍 Поиск"
+    STATS = "📊 Статистика"
+    KNOWLEDGE_BASE = "🍎 База знаний"
+    TESTING = "📝 Тестирование"
+    ADMIN_PANEL = "⚙️ Админ панель"
+
+def _create_button(
+    text: str, 
+    callback_data: Optional[str] = None, 
+    url: Optional[str] = None
+) -> types.InlineKeyboardButton:
+    """Создает кнопку с указанным текстом и данными"""
+    if url:
+        return types.InlineKeyboardButton(text=text, url=url)
+    return types.InlineKeyboardButton(text=text, callback_data=callback_data)
+
+def _add_navigation_buttons(
+    buttons: List[List[types.InlineKeyboardButton]],
+    back_data: str,
+    next_data: Optional[str] = None,
+    prev_data: Optional[str] = None
+) -> None:
+    """Добавляет кнопки навигации в массив кнопок"""
+    nav_buttons = []
+    if prev_data:
+        nav_buttons.append(_create_button(ButtonType.PREV.value, prev_data))
+    if next_data:
+        nav_buttons.append(_create_button(ButtonType.NEXT.value, next_data))
+    if nav_buttons:
+        buttons.append(nav_buttons)
+    buttons.append([_create_button(ButtonType.BACK.value, back_data)])
 
 def get_main_keyboard(is_admin: bool = False) -> types.ReplyKeyboardMarkup:
-    """Генерирует основную клавиатуру для пользователя"""
-    keyboard = [
-        [
-            types.KeyboardButton(text="🍎 База знаний"),
-            types.KeyboardButton(text="📝 Тестирование")
-        ],
-        [types.KeyboardButton(text="🔍 Поиск")]
+    """Основная клавиатура пользователя"""
+    buttons = [
+        [ButtonType.KNOWLEDGE_BASE.value, ButtonType.TESTING.value],
+        [ButtonType.SEARCH.value]
     ]
     
-    # Добавляем кнопку админ-панели, если пользователь - админ
     if is_admin:
-        keyboard.append([types.KeyboardButton(text="⚙️ Админ панель")])
+        buttons.append([ButtonType.ADMIN_PANEL.value])
     
     return types.ReplyKeyboardMarkup(
-        keyboard=keyboard,
-        resize_keyboard=True
+        keyboard=[[types.KeyboardButton(text=btn) for btn in row] for row in buttons],
+        resize_keyboard=True,
+        input_field_placeholder="Выберите действие"
     )
 
-def get_categories_keyboard(categories: List[Dict]) -> types.InlineKeyboardMarkup:
-    """Генерирует клавиатуру для выбора категорий"""
-    buttons = []
-    for category in categories:
-        buttons.append([
-            types.InlineKeyboardButton(
-                text=category['name'], 
-                callback_data=f"category:{category['id']}"
-            )
-        ])
-    
-    # Добавляем кнопку возврата в главное меню
-    buttons.append([
-        types.InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")
-    ])
-    
-    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
-
-def get_products_keyboard(products: List[Dict], category_id: str) -> types.InlineKeyboardMarkup:
-    """Генерирует клавиатуру для выбора товаров в категории"""
-    buttons = []
-    
-    # Добавляем кнопки для каждого продукта
-    for product in products:
-        buttons.append([
-            types.InlineKeyboardButton(
-                text=product['name'], 
-                callback_data=f"product:{product['id']}"
-            )
-        ])
-    
-    # Добавляем кнопку возврата к категориям
-    buttons.append([
-        types.InlineKeyboardButton(text="🔙 Назад к категориям", callback_data="knowledge_base")
-    ])
-    
-    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
-
-def get_product_navigation_keyboard(product_id: str, category_id: str) -> types.InlineKeyboardMarkup:
-    """Генерирует клавиатуру для навигации по изображениям товара"""
+def get_categories_keyboard(
+    categories: List[Dict],
+    back_callback: str = "main_menu"
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура выбора категорий"""
     buttons = [
-        [
-            types.InlineKeyboardButton(text="⬅️", callback_data=f"product_prev:{product_id}"),
-            types.InlineKeyboardButton(text="➡️", callback_data=f"product_next:{product_id}")
-        ],
-        [types.InlineKeyboardButton(text="🔙 Назад к товарам", callback_data=f"category:{category_id}")]
+        [_create_button(cat['name'], f"category:{cat['id']}")] 
+        for cat in categories
     ]
-    
+    buttons.append([_create_button(ButtonType.BACK.value, back_callback)])
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def get_tests_keyboard(tests: List[Dict]) -> types.InlineKeyboardMarkup:
-    """Генерирует клавиатуру для выбора тестов"""
+def get_products_keyboard(
+    products: List[Dict],
+    category_id: Union[int, str],
+    back_callback: str = "knowledge_base"
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура выбора товаров"""
+    buttons = [
+        [_create_button(prod['name'], f"product:{prod['id']}")] 
+        for prod in products
+    ]
+    buttons.append([_create_button(ButtonType.BACK_TO_CATEGORIES.value, back_callback)])
+    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_product_navigation_keyboard(
+    product_id: Union[int, str],
+    category_id: Union[int, str],
+    total_images: int = 1,
+    current_index: int = 0
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура навигации по товару"""
     buttons = []
     
-    for test in tests:
+    if total_images > 1:
         buttons.append([
-            types.InlineKeyboardButton(
-                text=test['title'], 
-                callback_data=f"test_select:{test['id']}"
-            )
+            _create_button(ButtonType.PREV.value, f"product_prev:{product_id}"),
+            _create_button(f"{current_index+1}/{total_images}", "current_image"),
+            _create_button(ButtonType.NEXT.value, f"product_next:{product_id}")
         ])
     
-    # Добавляем кнопку возврата
     buttons.append([
-        types.InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")
+        _create_button(
+            ButtonType.BACK_TO_CATEGORIES.value, 
+            f"category:{category_id}"
+        )
     ])
     
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def get_test_question_keyboard(question_idx: int, options: List[str], test_id: str) -> types.InlineKeyboardMarkup:
-    """Генерирует клавиатуру с вариантами ответов на вопросы теста"""
-    buttons = []
-    
-    # Добавляем варианты ответов
-    for idx, option in enumerate(options):
-        buttons.append([
-            types.InlineKeyboardButton(
-                text=option, 
-                callback_data=f"test_answer:{test_id}:{question_idx}:{idx}"
-            )
-        ])
-    
+def get_tests_keyboard(
+    tests: List[Dict],
+    back_callback: str = "main_menu"
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура выбора тестов"""
+    buttons = [
+        [_create_button(test['title'], f"test_select:{test['id']}")] 
+        for test in tests
+    ]
+    buttons.append([_create_button(ButtonType.BACK.value, back_callback)])
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def get_test_result_keyboard() -> types.InlineKeyboardMarkup:
-    """Генерирует клавиатуру для показа результатов теста"""
-    buttons = [
-        [types.InlineKeyboardButton(text="📝 Другие тесты", callback_data="testing")],
-        [types.InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
-    ]
+def get_test_question_keyboard(
+    question_idx: int,
+    options: List[str],
+    test_id: Union[int, str]
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура вариантов ответа на вопрос"""
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [_create_button(opt, f"test_answer:{test_id}:{question_idx}:{idx}")]
+        for idx, opt in enumerate(options)
+    ])
+
+def get_test_result_keyboard(
+    test_id: Optional[Union[int, str]] = None,
+    passed: bool = False
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура результатов теста"""
+    buttons = []
+    
+    if test_id and not passed:
+        buttons.append([
+            _create_button("🔄 Попробовать снова", f"test_select:{test_id}")
+        ])
+    
+    buttons.extend([
+        [_create_button(ButtonType.TESTING.value, "testing")],
+        [_create_button(ButtonType.BACK_TO_MAIN.value, "main_menu")]
+    ])
     
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_admin_keyboard() -> types.InlineKeyboardMarkup:
-    """Генерирует клавиатуру для админ-панели"""
+    """Клавиатура админ-панели"""
     buttons = [
-        [types.InlineKeyboardButton(text="📂 Управление категориями", callback_data="admin_categories")],
-        [types.InlineKeyboardButton(text="🍎 Управление товарами", callback_data="admin_products")],
-        [types.InlineKeyboardButton(text="📝 Управление тестами", callback_data="admin_tests")],
-        [types.InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
-        [types.InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]
+        ["📂 Категории", "🍎 Товары"],
+        ["📝 Тесты", "📊 Статистика"],
+        [ButtonType.BACK_TO_MAIN.value]
+    ]
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [_create_button(text, f"admin_{text.split()[1].lower()}") for text in row]
+        for row in buttons
+    ])
+
+def get_admin_list_keyboard(
+    items: List[Dict],
+    item_type: str,
+    parent_id: Optional[Union[int, str]] = None,
+    create_button: bool = True
+) -> types.InlineKeyboardMarkup:
+    """Универсальная клавиатура для списков в админке"""
+    buttons = [
+        [_create_button(item['name'], f"admin_{item_type}_edit:{item['id']}")]
+        for item in items
     ]
     
+    if create_button:
+        callback = f"admin_{item_type}_create"
+        if parent_id:
+            callback += f":{parent_id}"
+        buttons.append([_create_button(ButtonType.CREATE.value + f" {item_type}", callback)])
+    
+    buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, "admin")])
+    
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def get_admin_categories_keyboard(categories: List[Dict]) -> types.InlineKeyboardMarkup:
-    """Генерирует клавиатуру для управления категориями"""
+def get_pagination_keyboard(
+    current_page: int,
+    total_pages: int,
+    base_callback: str,
+    item_id: Optional[Union[int, str]] = None
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура пагинации"""
     buttons = []
     
-    # Добавляем существующие категории
-    for category in categories:
-        buttons.append([
-            types.InlineKeyboardButton(
-                text=category['name'], 
-                callback_data=f"admin_categories_edit:{category['id']}"
-            )
-        ])
+    if current_page > 1:
+        buttons.append(_create_button(ButtonType.PREV.value, f"{base_callback}_page:{item_id}:{current_page-1}"))
     
-    # Добавляем кнопку создания новой категории и возврата
-    buttons.append([
-        types.InlineKeyboardButton(text="➕ Создать категорию", callback_data="admin_categories_create")
-    ])
-    buttons.append([
-        types.InlineKeyboardButton(text="🔙 Назад", callback_data="admin")
-    ])
+    buttons.append(_create_button(f"{current_page}/{total_pages}", "current_page"))
     
-    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
+    if current_page < total_pages:
+        buttons.append(_create_button(ButtonType.NEXT.value, f"{base_callback}_page:{item_id}:{current_page+1}"))
+    
+    return types.InlineKeyboardMarkup(inline_keyboard=[buttons])
 
-def get_admin_products_keyboard(categories: List[Dict]) -> types.InlineKeyboardMarkup:
-    """Генерирует клавиатуру для выбора категории при управлении товарами"""
-    buttons = []
-    
-    # Добавляем кнопки для каждой категории
-    for category in categories:
-        buttons.append([
-            types.InlineKeyboardButton(
-                text=category['name'], 
-                callback_data=f"admin_products_category:{category['id']}"
-            )
-        ])
-    
-    # Добавляем кнопку возврата
-    buttons.append([
-        types.InlineKeyboardButton(text="🔙 Назад", callback_data="admin")
+def get_confirmation_keyboard(
+    confirm_text: str = "✅ Подтвердить",
+    confirm_callback: str = "confirm",
+    cancel_text: str = "❌ Отменить",
+    cancel_callback: str = "cancel"
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура подтверждения действия"""
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [
+            _create_button(confirm_text, confirm_callback),
+            _create_button(cancel_text, cancel_callback)
+        ]
     ])
-    
-    # Создать товар
-    buttons.append([types.InlineKeyboardButton(
-        text="➕ Создать товар", 
-        callback_data="create_product"
-    )])
-    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
-
-def get_admin_products_list_keyboard(products: List[Dict], category_id: str) -> types.InlineKeyboardMarkup:
-    """Генерирует клавиатуру со списком товаров для управления"""
-    buttons = []
-    
-    # Добавляем кнопки для каждого товара
-    for product in products:
-        buttons.append([
-            types.InlineKeyboardButton(
-                text=product['name'], 
-                callback_data=f"admin_products_edit:{product['id']}"
-            )
-        ])
-    
-    # Добавляем кнопку создания нового товара и возврата
-    buttons.append([
-        types.InlineKeyboardButton(
-            text="➕ Добавить товар", 
-            callback_data=f"admin_products_create:{category_id}"
-        )
-    ])
-    buttons.append([
-        types.InlineKeyboardButton(text="🔙 Назад к категориям", callback_data="admin_products")
-    ])
-    
-    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
-
-def get_admin_tests_keyboard(tests: List[Dict]) -> types.InlineKeyboardMarkup:
-    """Генерирует клавиатуру для управления тестами"""
-    buttons = []
-    
-    # Добавляем кнопки для каждого теста
-    for test in tests:
-        buttons.append([
-            types.InlineKeyboardButton(
-                text=test['title'], 
-                callback_data=f"admin_tests_edit:{test['id']}"
-            )
-        ])
-    
-    # Добавляем кнопку создания нового теста и возврата
-    buttons.append([
-        types.InlineKeyboardButton(text="➕ Создать тест", callback_data="admin_tests_create")
-    ])
-    buttons.append([
-        types.InlineKeyboardButton(text="🔙 Назад", callback_data="admin")
-    ])
-    
-    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
-
-def get_admin_stats_keyboard() -> types.InlineKeyboardMarkup:
-    """Генерирует клавиатуру для просмотра статистики"""
-    buttons = [
-        [types.InlineKeyboardButton(text="👥 Пользователи", callback_data="admin_stats_users")],
-        [types.InlineKeyboardButton(text="📝 Тестирование", callback_data="admin_stats_tests")],
-        [types.InlineKeyboardButton(text="🔙 Назад", callback_data="admin")]
-    ]
-    
-    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
