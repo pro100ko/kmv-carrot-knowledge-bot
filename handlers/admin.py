@@ -6,7 +6,6 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramBadRequest
-
 from utils.message_utils import safe_edit_message
 from sqlite_db import (
     add_test, get_categories, add_category,
