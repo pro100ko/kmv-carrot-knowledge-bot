@@ -192,7 +192,7 @@ async def create_product_handler(
     )
 
 # ===== ТЕСТЫ =====
-@dp.callback_query(F.data == "admin_tests"))
+@dp.callback_query(F.data == "admin_tests")
 async def admin_tests_handler(
     query: types.CallbackQuery,
     state: FSMContext
@@ -257,7 +257,7 @@ async def admin_stats_handler(
     )
 
 # ===== ПОИСК ТОВАРОВ =====
-@dp.callback_query(F.data == "admin_search_products"))
+@dp.callback_query(F.data == "admin_search_products")
 async def admin_search_products_handler(
     query: types.CallbackQuery,
     state: FSMContext
