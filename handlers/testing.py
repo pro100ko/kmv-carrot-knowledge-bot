@@ -143,21 +143,23 @@ async def test_question_handler(
         return
     
     # Обработка ответа пользователя
-    if action != 'start':
-        question_idx = int(parts[2])
-        answer_idx = int(parts[3])
-        correct_idx = test['questions'][question_idx]['correct_option']
-        
-        session['answers'].append({
-            'question_id': question_idx,
-            'selected_option': answer_idx,
-            'is_correct': answer_idx == correct_idx
-        })
-        
-        if answer_idx == correct_idx:
-            session['score'] += 1
-        
-        session['current_question'] += 1
+async def test_answer_handler(query: CallbackQuery):
+    _, test_id, question_idx, answer_idx = query.data.split(':')
+    session = TestSessionManager.get_session(query.from_user.id)
+    if not session:
+        await query.answer("Сессия истекла")
+        return
+    
+    question = get_question(test_id, question_idx)
+    if not question:
+        await query.answer("Вопрос не найден")
+        return
+    
+    session['answers'].append({
+        'question_idx': question_idx,
+        'answer_idx': answer_idx,
+        'is_correct': answer_idx == question['correct']
+    })
     
     # Проверка завершения теста
     if session['current_question'] >= len(test['questions']):
