@@ -1,4 +1,7 @@
 # dispatcher.py
 from aiogram import Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
 
-dp = Dispatcher()
+# Initialize dispatcher with memory storage
+storage = MemoryStorage()
+dp = Dispatcher(storage=storage)

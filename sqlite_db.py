@@ -1,4 +1,3 @@
-
 import sqlite3
 import os
 import logging
@@ -56,131 +55,128 @@ class Database:
             
             with db_lock:
                 cursor = self.conn.cursor()
-        
-        # Создаем таблицы, если они не существуют
-        
-        # Таблица пользователей
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER UNIQUE,
-            first_name TEXT,
-            last_name TEXT,
-            username TEXT,
-            is_admin INTEGER DEFAULT 0,
-            created_at TEXT,
-            last_active TEXT
-        )
-        ''')
-        
-        # Таблица категорий продуктов
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS categories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE,
-            description TEXT,
-            image_url TEXT,
-            order_num INTEGER DEFAULT 0
-        )
-        ''')
-        except Exception as e:
-    logger.error(f"Error creating categories table: {e}")
-    raise
-        
-        # Таблица продуктов
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS products (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            category_id INTEGER,
-            description TEXT,
-            price_info TEXT,
-            storage_conditions TEXT,
-            created_at TEXT,
-            updated_at TEXT,
-            FOREIGN KEY (category_id) REFERENCES categories (id)
-        )
-        ''')
-        
-        # Таблица изображений продукта
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS product_images (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            product_id INTEGER,
-            image_url TEXT,
-            FOREIGN KEY (product_id) REFERENCES products (id)
-        )
-        ''')
-        
-        # Таблица тестов
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS tests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
-            description TEXT,
-            category_id INTEGER,
-            passing_score INTEGER,
-            is_active INTEGER DEFAULT 1,
-            created_at TEXT,
-            created_by INTEGER,
-            FOREIGN KEY (category_id) REFERENCES categories (id),
-            FOREIGN KEY (created_by) REFERENCES users (id)
-        )
-        ''')
-        
-        # Таблица вопросов
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS questions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            test_id INTEGER,
-            text TEXT,
-            correct_option INTEGER,
-            explanation TEXT,
-            FOREIGN KEY (test_id) REFERENCES tests (id)
-        )
-        ''')
-        
-        # Таблица вариантов ответа
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS options (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            question_id INTEGER,
-            option_text TEXT,
-            option_index INTEGER,
-            FOREIGN KEY (question_id) REFERENCES questions (id)
-        )
-        ''')
-        
-        # Таблица результатов тестирования
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS test_attempts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            test_id INTEGER,
-            score INTEGER,
-            max_score INTEGER,
-            completed INTEGER DEFAULT 0,
-            started_at TEXT,
-            completed_at TEXT,
-            FOREIGN KEY (user_id) REFERENCES users (id),
-            FOREIGN KEY (test_id) REFERENCES tests (id)
-        )
-        ''')
-        
-        # Таблица ответов пользователя
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS user_answers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            attempt_id INTEGER,
-            question_id INTEGER,
-            selected_option INTEGER,
-            is_correct INTEGER,
-            FOREIGN KEY (attempt_id) REFERENCES test_attempts (id),
-            FOREIGN KEY (question_id) REFERENCES questions (id)
-        )
-        ''')
-        
-        # Создаем индексы
+                
+                # Создаем таблицы, если они не существуют
+                
+                # Таблица пользователей
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    telegram_id INTEGER UNIQUE,
+                    first_name TEXT,
+                    last_name TEXT,
+                    username TEXT,
+                    is_admin INTEGER DEFAULT 0,
+                    created_at TEXT,
+                    last_active TEXT
+                )
+                ''')
+                
+                # Таблица категорий продуктов
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE,
+                    description TEXT,
+                    image_url TEXT,
+                    order_num INTEGER DEFAULT 0
+                )
+                ''')
+                
+                # Таблица продуктов
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS products (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT,
+                    category_id INTEGER,
+                    description TEXT,
+                    price_info TEXT,
+                    storage_conditions TEXT,
+                    created_at TEXT,
+                    updated_at TEXT,
+                    FOREIGN KEY (category_id) REFERENCES categories (id)
+                )
+                ''')
+                
+                # Таблица изображений продукта
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS product_images (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    product_id INTEGER,
+                    image_url TEXT,
+                    FOREIGN KEY (product_id) REFERENCES products (id)
+                )
+                ''')
+                
+                # Таблица тестов
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT,
+                    description TEXT,
+                    category_id INTEGER,
+                    passing_score INTEGER,
+                    is_active INTEGER DEFAULT 1,
+                    created_at TEXT,
+                    created_by INTEGER,
+                    FOREIGN KEY (category_id) REFERENCES categories (id),
+                    FOREIGN KEY (created_by) REFERENCES users (id)
+                )
+                ''')
+                
+                # Таблица вопросов
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS questions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    test_id INTEGER,
+                    text TEXT,
+                    correct_option INTEGER,
+                    explanation TEXT,
+                    FOREIGN KEY (test_id) REFERENCES tests (id)
+                )
+                ''')
+                
+                # Таблица вариантов ответа
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS options (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    question_id INTEGER,
+                    option_text TEXT,
+                    option_index INTEGER,
+                    FOREIGN KEY (question_id) REFERENCES questions (id)
+                )
+                ''')
+                
+                # Таблица результатов тестирования
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS test_attempts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    test_id INTEGER,
+                    score INTEGER,
+                    max_score INTEGER,
+                    completed INTEGER DEFAULT 0,
+                    started_at TEXT,
+                    completed_at TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users (id),
+                    FOREIGN KEY (test_id) REFERENCES tests (id)
+                )
+                ''')
+                
+                # Таблица ответов пользователя
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_answers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    attempt_id INTEGER,
+                    question_id INTEGER,
+                    selected_option INTEGER,
+                    is_correct INTEGER,
+                    FOREIGN KEY (attempt_id) REFERENCES test_attempts (id),
+                    FOREIGN KEY (question_id) REFERENCES questions (id)
+                )
+                ''')
+                
+                # Создаем индексы
                 cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_products_category 
                 ON products(category_id)
@@ -202,7 +198,8 @@ class Database:
             raise
     
     def _execute(self, query: str, params: tuple = (), commit: bool = False):
-        """Универсальный метод выполнения запроса"""
+        """Execute a database query with proper error handling"""
+        cursor = None
         try:
             with db_lock:
                 cursor = self.conn.cursor()
@@ -210,15 +207,16 @@ class Database:
                 if commit:
                     self.conn.commit()
                 return cursor
-            finally:
-            cursor.close()
         except Exception as e:
             logger.error(f"Query failed: {query} - {e}")
             raise
+        finally:
+            if cursor:
+                cursor.close()
 
     # === User Operations ===
     def register_user(self, user_data: Dict) -> bool:
-        """Регистрирует или обновляет пользователя"""
+        """Register or update a user"""
         now = datetime.now().isoformat()
         params = (
             user_data['telegram_id'],
@@ -229,20 +227,22 @@ class Database:
         )
         
         try:
-            # Пытаемся обновить существующего пользователя
+            # Try to update existing user
             cursor = self._execute(
                 '''UPDATE users SET 
                    first_name=?, last_name=?, username=?, last_active=?
                    WHERE telegram_id=?''',
                 (params[1], params[2], params[3], params[4], params[0])
+            )
             
             if cursor.rowcount == 0:
-                # Если пользователь не найден, создаем нового
+                # If user not found, create new one
                 self._execute(
                     '''INSERT INTO users 
                        (telegram_id, first_name, last_name, username, created_at, last_active)
                        VALUES (?, ?, ?, ?, ?, ?)''',
-                    params, commit=True)
+                    params, commit=True
+                )
             return True
         except Exception as e:
             logger.error(f"Failed to register user: {e}")
