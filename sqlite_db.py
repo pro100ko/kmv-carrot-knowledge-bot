@@ -207,6 +207,8 @@ class Database:
                 if commit:
                     self.conn.commit()
                 return cursor
+            finally:
+            cursor.close()
         except Exception as e:
             logger.error(f"Query failed: {query} - {e}")
             raise
@@ -278,6 +280,7 @@ class Database:
         
         try:
             with db_lock:
+                self.conn.execute("BEGIN TRANSACTION")
                 cursor = self.conn.cursor()
                 
                 # Добавляем продукт
@@ -305,6 +308,8 @@ class Database:
                 self.conn.commit()
                 return product_id
         except Exception as e:
+            self.conn.rollback()
+        raise
             logger.error(f"Failed to add product: {e}")
             return None
     
