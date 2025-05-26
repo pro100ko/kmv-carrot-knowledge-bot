@@ -295,6 +295,13 @@ async def process_product_search(
     )
     await state.clear()
 
+@dp.message(CategoryForm.name)
+async def process_name(message: Message, state: FSMContext):
+    if len(message.text) > 100:
+        await message.answer("Слишком длинное название")
+        return
+    await state.update_data(name=message.text)
+
 # ===== ОТМЕНА ДЕЙСТВИЙ =====
 @dp.callback_query(F.data.startswith("cancel_"))
 async def cancel_handler(
