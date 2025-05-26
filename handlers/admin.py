@@ -85,7 +85,7 @@ async def send_admin_menu(
 
 # ===== ОСНОВНЫЕ ОБРАБОТЧИКИ =====
 @dp.message(Command("admin"))
-@dp.callback_query(F.data == "admin"))
+@dp.callback_query(F.data == "admin")
 async def admin_handler(
     update: types.Message | types.CallbackQuery,
     state: FSMContext
