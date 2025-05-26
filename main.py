@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
