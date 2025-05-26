@@ -1,2 +1,5 @@
+from .admin import *
+from .knowledge_base import *
+from .testing import *
 
-# Пустой файл для инициализации пакета handlers
+__all__ = ['admin', 'knowledge_base', 'testing']
