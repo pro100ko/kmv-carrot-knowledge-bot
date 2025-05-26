@@ -334,7 +334,8 @@ def search_products(self, search_query: str, limit: int = 10) -> List[Dict]:
     if not search_query or len(search_query.strip()) < 2:
         return []
 
-    search_term = f"%{search_query.strip().lower()}%"
+    safe_query = search_query.strip().replace("%", "").lower()
+    search_term = f"%{safe_query}%"
     
     try:
         cursor = self._execute('''
