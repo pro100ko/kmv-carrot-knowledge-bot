@@ -99,7 +99,7 @@ async def admin_handler(
     await send_admin_menu(update)
 
 # ===== КАТЕГОРИИ =====
-@dp.callback_query(F.data == "admin_categories"))
+@dp.callback_query(F.data == "admin_categories")
 async def admin_categories_handler(
     query: types.CallbackQuery,
     state: FSMContext
