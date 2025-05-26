@@ -83,6 +83,9 @@ class Database:
             order_num INTEGER DEFAULT 0
         )
         ''')
+        except Exception as e:
+    logger.error(f"Error creating categories table: {e}")
+    raise
         
         # Таблица продуктов
         cursor.execute('''
