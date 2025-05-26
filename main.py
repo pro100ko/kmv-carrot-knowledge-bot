@@ -10,7 +10,7 @@ import asyncio
 from aiohttp import web
 from aiogram import Bot
 from dispatcher import dp  # Импортируем dp
-from handlers import admin, knowledge_base, testing  # Импортируем обработчики после инициализации dp
+from .handlers import admin, knowledge_base, testing  # Импортируем обработчики после инициализации dp
 
 # Импортируем настройки
 from config import BOT_TOKEN, WEBHOOK_URL, WEBHOOK_PATH
