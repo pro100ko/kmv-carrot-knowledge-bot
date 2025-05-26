@@ -186,23 +186,22 @@ def get_admin_list_keyboard(
     
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def get_pagination_keyboard(
-    current_page: int,
-    total_pages: int,
-    base_callback: str,
-    item_id: Optional[Union[int, str]] = None
-) -> types.InlineKeyboardMarkup:
-    """Клавиатура пагинации"""
+def get_pagination_keyboard(page, total_pages, prefix):
     buttons = []
-    
-    if current_page > 1:
-        buttons.append(_create_button(ButtonType.PREV.value, f"{base_callback}_page:{item_id}:{current_page-1}"))
-    
-    buttons.append(_create_button(f"{current_page}/{total_pages}", "current_page"))
-    
-    if current_page < total_pages:
-        buttons.append(_create_button(ButtonType.NEXT.value, f"{base_callback}_page:{item_id}:{current_page+1}"))
-    
+    if page > 1:
+        buttons.append(types.InlineKeyboardButton(
+            text="⬅️",
+            callback_data=f"{prefix}:page:{page-1}"
+        ))
+    buttons.append(types.InlineKeyboardButton(
+        text=f"{page}/{total_pages}",
+        callback_data="current_page"
+    ))
+    if page < total_pages:
+        buttons.append(types.InlineKeyboardButton(
+            text="➡️",
+            callback_data=f"{prefix}:page:{page+1}"
+        ))
     return types.InlineKeyboardMarkup(inline_keyboard=[buttons])
 
 def get_confirmation_keyboard(
