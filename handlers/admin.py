@@ -118,7 +118,7 @@ async def admin_categories_handler(
         reply_markup=get_admin_categories_keyboard(categories)
     )
 
-@dp.callback_query(F.data == "create_category"))
+@dp.callback_query(F.data == "create_category")
 async def create_category_handler(
     callback: types.CallbackQuery,
     state: FSMContext
