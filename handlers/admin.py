@@ -175,7 +175,7 @@ async def admin_products_handler(
             reply_markup=get_admin_products_keyboard(categories)
         )
 
-@dp.callback_query(F.data == "create_product"))
+@dp.callback_query(F.data == "create_product")
 async def create_product_handler(
     callback: types.CallbackQuery,
     state: FSMContext
