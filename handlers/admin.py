@@ -57,6 +57,12 @@ async def check_admin_access(user_id: int, query: types.CallbackQuery = None) ->
         return False
     return True
 
+async def admin_check_middleware(handler, event, data):
+    if event.from_user.id not in ADMIN_IDS:
+        await event.answer("Доступ запрещен")
+        return
+    return await handler(event, data)
+
 async def send_admin_menu(
     target: types.Message | types.CallbackQuery,
     text: str = "🔧 <b>Административная панель</b>\n\nВыберите раздел для управления:"
