@@ -69,7 +69,11 @@ async def admin_handler(
     if not await check_admin_access(user_id, update if isinstance(update, types.CallbackQuery) else None):
         return
     
-    await state.clear()
+    try:
+        await state.clear()
+    except Exception as e:
+        logger.warning(f"Failed to clear state: {e}")
+    
     await send_admin_menu(update)
 
 # ===== КАТЕГОРИИ =====
@@ -82,7 +86,11 @@ async def admin_categories_handler(
     if not await check_admin_access(query.from_user.id, query):
         return
     
-    await state.clear()
+    try:
+        await state.clear()
+    except Exception as e:
+        logger.warning(f"Failed to clear state: {e}")
+    
     categories = db.get_categories()  # Use db instance
     
     await safe_edit_message(
@@ -118,7 +126,11 @@ async def admin_products_handler(
     if not await check_admin_access(query.from_user.id, query):
         return
     
-    await state.clear()
+    try:
+        await state.clear()
+    except Exception as e:
+        logger.warning(f"Failed to clear state: {e}")
+    
     parts = query.data.split(':')
     
     if len(parts) > 1 and parts[0] == 'admin_products_category':
@@ -175,7 +187,11 @@ async def admin_tests_handler(
     if not await check_admin_access(query.from_user.id, query):
         return
     
-    await state.clear()
+    try:
+        await state.clear()
+    except Exception as e:
+        logger.warning(f"Failed to clear state: {e}")
+    
     tests = db.get_tests_list()
     
     await safe_edit_message(
@@ -196,7 +212,11 @@ async def admin_stats_handler(
     if not await check_admin_access(query.from_user.id, query):
         return
     
-    await state.clear()
+    try:
+        await state.clear()
+    except Exception as e:
+        logger.warning(f"Failed to clear state: {e}")
+    
     parts = query.data.split('_')
     
     if len(parts) > 2:
