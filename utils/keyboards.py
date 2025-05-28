@@ -155,14 +155,17 @@ def get_test_result_keyboard(
 def get_admin_keyboard() -> types.InlineKeyboardMarkup:
     """Клавиатура админ-панели"""
     buttons = [
-        ["📂 Категории", "🍎 Товары"],
-        ["📝 Тесты", "📊 Статистика"],
-        [ButtonType.BACK_TO_MAIN.value]
+        [
+            _create_button("📂 Категории", "admin_categories"),
+            _create_button("🍎 Товары", "admin_products")
+        ],
+        [
+            _create_button("📝 Тесты", "admin_tests"),
+            _create_button("📊 Статистика", "admin_stats")
+        ],
+        [_create_button(ButtonType.BACK_TO_MAIN.value, "main_menu")]
     ]
-    return types.InlineKeyboardMarkup(inline_keyboard=[
-        [_create_button(text, f"admin_{text.split()[1].lower()}") for text in row]
-        for row in buttons
-    ])
+    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_admin_list_keyboard(
     items: List[Dict],
@@ -222,26 +225,26 @@ def get_admin_categories_keyboard(
     categories: List[Dict],
     back_callback: str = "admin"
 ) -> types.InlineKeyboardMarkup:
-    """Клавиатура управления категориями в админке"""
+    """Клавиатура управления категориями"""
     buttons = [
         [_create_button(cat['name'], f"admin_category_edit:{cat['id']}")] 
         for cat in categories
     ]
     buttons.append([_create_button(ButtonType.CREATE.value + " категорию", "create_category")])
-    buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, back_callback)])
+    buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, "admin")])
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_admin_products_keyboard(
     categories: List[Dict],
     back_callback: str = "admin"
 ) -> types.InlineKeyboardMarkup:
-    """Клавиатура выбора категории товаров в админке"""
+    """Клавиатура управления товарами"""
     buttons = [
         [_create_button(cat['name'], f"admin_products_category:{cat['id']}")] 
         for cat in categories
     ]
     buttons.append([_create_button(ButtonType.SEARCH.value, "admin_search_products")])
-    buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, back_callback)])
+    buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, "admin")])
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_admin_products_list_keyboard(
@@ -249,39 +252,39 @@ def get_admin_products_list_keyboard(
     category_id: Optional[Union[int, str]] = None,
     back_callback: str = "admin_products"
 ) -> types.InlineKeyboardMarkup:
-    """Клавиатура списка товаров в админке"""
+    """Клавиатура списка товаров в категории"""
     buttons = [
         [_create_button(prod['name'], f"admin_product_edit:{prod['id']}")] 
         for prod in products
     ]
     if category_id:
         buttons.append([_create_button(ButtonType.CREATE.value + " товар", f"create_product:{category_id}")])
-    else:
-        buttons.append([_create_button(ButtonType.CREATE.value + " товар", "create_product")])
-    buttons.append([_create_button(ButtonType.BACK_TO_CATEGORIES.value, back_callback)])
+    buttons.append([_create_button(ButtonType.BACK_TO_CATEGORIES.value, "admin_products")])
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_admin_tests_keyboard(
     tests: List[Dict],
     back_callback: str = "admin"
 ) -> types.InlineKeyboardMarkup:
-    """Клавиатура управления тестами в админке"""
+    """Клавиатура управления тестами"""
     buttons = [
         [_create_button(test['title'], f"admin_test_edit:{test['id']}")] 
         for test in tests
     ]
     buttons.append([_create_button(ButtonType.CREATE.value + " тест", "create_test")])
-    buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, back_callback)])
+    buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, "admin")])
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_admin_stats_keyboard(
     back_callback: str = "admin"
 ) -> types.InlineKeyboardMarkup:
-    """Клавиатура статистики в админке"""
+    """Клавиатура статистики"""
     buttons = [
-        [_create_button("👥 Пользователи", "admin_stats_users")],
-        [_create_button("📝 Тесты", "admin_stats_tests")],
-        [_create_button(ButtonType.BACK_TO_ADMIN.value, back_callback)]
+        [
+            _create_button("👥 Пользователи", "admin_stats_users"),
+            _create_button("📝 Тесты", "admin_stats_tests")
+        ],
+        [_create_button(ButtonType.BACK_TO_ADMIN.value, "admin")]
     ]
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
