@@ -1,4 +1,5 @@
 from aiogram import F, types
+from aiogram.types import Message
 from aiogram.filters import Command
 import uuid
 import logging
