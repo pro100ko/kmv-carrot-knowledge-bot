@@ -23,6 +23,10 @@ class TestSessionManager:
     @staticmethod
     def start_session(user_id: int, test_id: str) -> Dict:
         """Создает новую тестовую сессию"""
+        # Ensure we have a clean state by removing any existing session
+        TestSessionManager.end_session(user_id)
+        
+        # Create new session
         user_test_sessions[user_id] = {
             'test_id': test_id,
             'current_question': 0,
@@ -41,7 +45,7 @@ class TestSessionManager:
     def end_session(user_id: int) -> None:
         """Завершает сессию пользователя"""
         if user_id in user_test_sessions:
-            del user_test_sessions[user_id]
+            user_test_sessions.pop(user_id, None)  # Safely remove the session
 
 async def testing_handler(
     update: types.Message | types.CallbackQuery,
