@@ -292,3 +292,11 @@ def get_cancel_keyboard(
     return types.InlineKeyboardMarkup(inline_keyboard=[
         [_create_button("❌ Отменить", cancel_callback)]
     ])
+
+def get_back_to_categories_keyboard(
+    back_callback: str = "knowledge_base"
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура возврата к списку категорий"""
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [_create_button(ButtonType.BACK_TO_CATEGORIES.value, back_callback)]
+    ])
