@@ -37,6 +37,20 @@ async def admin_check_middleware(handler, event, data):
         return
     return await handler(event, data)
 
+async def safe_clear_state(state: FSMContext) -> None:
+    """Safely clear the state, handling any errors"""
+    if state is None:
+        return
+    
+    try:
+        current_state = await state.get_state()
+        if current_state is not None:
+            await state.clear()
+            logger.debug(f"State cleared successfully. Previous state: {current_state}")
+    except Exception as e:
+        logger.warning(f"Failed to clear state: {e}")
+        # Don't raise the exception, just log it
+
 async def send_admin_menu(
     target: types.Message | types.CallbackQuery,
     text: str = "🔧 <b>Административная панель</b>\n\nВыберите раздел для управления:"
@@ -69,11 +83,7 @@ async def admin_handler(
     if not await check_admin_access(user_id, update if isinstance(update, types.CallbackQuery) else None):
         return
     
-    try:
-        await state.clear()
-    except Exception as e:
-        logger.warning(f"Failed to clear state: {e}")
-    
+    await safe_clear_state(state)
     await send_admin_menu(update)
 
 # ===== КАТЕГОРИИ =====
@@ -86,11 +96,7 @@ async def admin_categories_handler(
     if not await check_admin_access(query.from_user.id, query):
         return
     
-    try:
-        await state.clear()
-    except Exception as e:
-        logger.warning(f"Failed to clear state: {e}")
-    
+    await safe_clear_state(state)
     categories = db.get_categories()  # Use db instance
     
     await safe_edit_message(
@@ -109,6 +115,7 @@ async def create_category_handler(
     if not await check_admin_access(callback.from_user.id, callback):
         return
     
+    await safe_clear_state(state)  # Clear any existing state first
     await state.set_state(CategoryForm.name)
     await safe_edit_message(
         message=callback.message,
@@ -126,11 +133,7 @@ async def admin_products_handler(
     if not await check_admin_access(query.from_user.id, query):
         return
     
-    try:
-        await state.clear()
-    except Exception as e:
-        logger.warning(f"Failed to clear state: {e}")
-    
+    await safe_clear_state(state)
     parts = query.data.split(':')
     
     if len(parts) > 1 and parts[0] == 'admin_products_category':
@@ -170,6 +173,7 @@ async def create_product_handler(
     if not await check_admin_access(callback.from_user.id, callback):
         return
     
+    await safe_clear_state(state)  # Clear any existing state first
     await state.set_state(ProductForm.name)
     await safe_edit_message(
         message=callback.message,
@@ -187,19 +191,14 @@ async def admin_tests_handler(
     if not await check_admin_access(query.from_user.id, query):
         return
     
-    try:
-        await state.clear()
-    except Exception as e:
-        logger.warning(f"Failed to clear state: {e}")
-    
+    await safe_clear_state(state)
     tests = db.get_tests_list()
     
     await safe_edit_message(
         message=query.message,
         text="📝 <b>Управление тестами</b>\n\nВыберите тест для редактирования или создайте новый:",
         parse_mode=ParseMode.HTML,
-        reply_markup=get_admin_tests_keyboard(tests),
-        inline_message_id=str(uuid.uuid4())
+        reply_markup=get_admin_tests_keyboard(tests)
     )
 
 # ===== СТАТИСТИКА =====
@@ -212,11 +211,7 @@ async def admin_stats_handler(
     if not await check_admin_access(query.from_user.id, query):
         return
     
-    try:
-        await state.clear()
-    except Exception as e:
-        logger.warning(f"Failed to clear state: {e}")
-    
+    await safe_clear_state(state)
     parts = query.data.split('_')
     
     if len(parts) > 2:
@@ -256,14 +251,15 @@ async def admin_search_products_handler(
     query: types.CallbackQuery,
     state: FSMContext
 ) -> None:
-    """Поиск товаров в админке"""
+    """Поиск товаров"""
     if not await check_admin_access(query.from_user.id, query):
         return
     
+    await safe_clear_state(state)  # Clear any existing state first
     await state.set_state(ProductForm.search)
     await safe_edit_message(
         message=query.message,
-        text="🔍 Введите название товара для поиска:",
+        text="🔍 Введите поисковый запрос:",
         reply_markup=get_cancel_keyboard("cancel_search")
     )
 
@@ -273,34 +269,46 @@ async def process_product_search(
     state: FSMContext
 ) -> None:
     """Обработка поискового запроса"""
-    search_query = message.text.strip()
-    if len(search_query) < 2:
-        await message.answer("❌ Слишком короткий поисковый запрос (минимум 2 символа)")
+    if not await check_admin_access(message.from_user.id):
         return
     
-    products = db.search_products(search_query)
+    query_text = message.text.strip()
+    if not query_text:
+        await message.answer("❌ Поисковый запрос не может быть пустым")
+        return
     
+    products = db.search_products(query_text)
     if not products:
-        await message.answer("🔎 Товары не найдены")
+        await message.answer("❌ Товары не найдены")
+        await safe_clear_state(state)
         return
     
-    text = "🔍 <b>Результаты поиска</b>\n\n"
-    for product in products[:10]:  # Ограничиваем 10 результатами
-        text += f"▪️ {product['name']} (ID: {product['id']})\n"
+    text = f"🔍 <b>Результаты поиска</b>\n\nНайдено товаров: {len(products)}\n\n"
+    for product in products:
+        text += f"• {product['name']} (ID: {product['id']})\n"
     
-    await message.answer(
-        text=text,
-        parse_mode=ParseMode.HTML,
-        reply_markup=get_admin_products_list_keyboard(products)
-    )
-    await state.clear()
+    await message.answer(text, parse_mode=ParseMode.HTML)
+    await safe_clear_state(state)
 
 @dp.message(CategoryForm.name)
 async def process_name(message: Message, state: FSMContext):
-    if len(message.text) > 100:
-        await message.answer("Слишком длинное название")
+    """Обработка ввода названия категории"""
+    if not await check_admin_access(message.from_user.id):
         return
-    await state.update_data(name=message.text)
+    
+    name = message.text.strip()
+    if not name:
+        await message.answer("❌ Название категории не может быть пустым")
+        return
+    
+    try:
+        db.add_category(name)
+        await message.answer(f"✅ Категория '{name}' успешно создана")
+    except Exception as e:
+        logger.error(f"Failed to create category: {e}")
+        await message.answer("❌ Ошибка при создании категории")
+    
+    await safe_clear_state(state)
 
 # ===== ОТМЕНА ДЕЙСТВИЙ =====
 @dp.callback_query(F.data.startswith("cancel_"))
@@ -308,9 +316,13 @@ async def cancel_handler(
     query: types.CallbackQuery,
     state: FSMContext
 ) -> None:
-    """Обработчик отмены действий"""
-    await state.clear()
-    await send_admin_menu(query, "❌ Действие отменено")
+    """Отмена текущего действия"""
+    if not await check_admin_access(query.from_user.id, query):
+        return
+    
+    await safe_clear_state(state)
+    await query.answer("❌ Действие отменено")
+    await send_admin_menu(query)
 
 __all__ = [
     'admin_handler',
