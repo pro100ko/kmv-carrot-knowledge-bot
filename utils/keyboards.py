@@ -300,3 +300,11 @@ def get_back_to_categories_keyboard(
     return types.InlineKeyboardMarkup(inline_keyboard=[
         [_create_button(ButtonType.BACK_TO_CATEGORIES.value, back_callback)]
     ])
+
+def get_back_to_tests_keyboard(
+    back_callback: str = "testing"
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура возврата к списку тестов"""
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [_create_button(ButtonType.BACK_TO_TESTS.value, back_callback)]
+    ])
