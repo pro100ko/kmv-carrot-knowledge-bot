@@ -3,7 +3,7 @@ from aiogram.enums import ParseMode
 from aiogram.utils.media_group import MediaGroupBuilder
 from typing import Optional, Dict, List
 
-import sqlite_db
+from sqlite_db import db  # Import the database instance
 from utils.keyboards import (
     get_categories_keyboard,
     get_products_keyboard,
@@ -34,7 +34,7 @@ class ProductViewer:
         state = ProductViewer.get_current_state(user_id, product_id)
         if product_id not in state:
             state[product_id] = 0
-        images_count = len(sqlite_db.get_product(product_id).get('image_urls', []))
+        images_count = len(db.get_product(product_id).get('image_urls', []))
         state[product_id] = (state[product_id] + delta) % images_count if images_count > 0 else 0
         return state[product_id]
     
@@ -49,7 +49,7 @@ async def knowledge_base_handler(
     context=None
 ) -> None:
     """Главный обработчик базы знаний"""
-    categories = sqlite_db.get_categories()
+    categories = db.get_categories()
     if not categories:
         text = "В базе знаний пока нет категорий товаров."
         keyboard = None
@@ -77,9 +77,9 @@ async def category_handler(
     """Обработчик выбора категории"""
     await query.answer()
     category_id = int(query.data.split(':')[1])
-    products = sqlite_db.get_products_by_category(category_id)
+    products = db.get_products_by_category(category_id)
     category = next(
-        (c for c in sqlite_db.get_categories() if c['id'] == category_id),
+        (c for c in db.get_categories() if c['id'] == category_id),
         {'name': 'Категория'}
     )
     
@@ -106,7 +106,7 @@ async def product_handler(
     user_id = query.from_user.id
     action, product_id = query.data.split(':')[:2]
     product_id = int(product_id)
-    product = sqlite_db.get_product(product_id)
+    product = db.get_product(product_id)
     
     if not product:
         await safe_edit_message(
@@ -200,7 +200,7 @@ async def search_handler(
         )
         return
     
-    products = sqlite_db.search_products(query_text)[:MAX_SEARCH_RESULTS]
+    products = db.search_products(query_text)[:MAX_SEARCH_RESULTS]
     
     if not products:
         await message.answer(
