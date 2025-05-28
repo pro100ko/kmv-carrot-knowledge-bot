@@ -1,4 +1,5 @@
 from aiogram import F, types
+from aiogram.filters import Command
 import uuid
 import logging
 from aiogram.enums import ParseMode
