@@ -19,28 +19,6 @@ from states import CategoryForm, ProductForm, TestForm
 
 logger = logging.getLogger(__name__)
 
-# Определяем состояния для FSM
-class CategoryForm(StatesGroup):
-    name = State()
-    description = State()
-    image = State()
-
-class ProductForm(StatesGroup):
-    name = State()
-    category = State()
-    description = State()
-    price = State()
-    storage = State()
-    images = State()
-    video = State()
-
-class TestForm(StatesGroup):
-    title = State()
-    description = State()
-    category = State()
-    questions = State()
-    passing_score = State()
-
 # ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
 async def check_admin_access(user_id: int, query: types.CallbackQuery = None) -> bool:
     """Проверяет права администратора"""
