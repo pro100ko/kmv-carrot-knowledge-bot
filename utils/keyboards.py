@@ -217,3 +217,78 @@ def get_confirmation_keyboard(
             _create_button(cancel_text, cancel_callback)
         ]
     ])
+
+def get_admin_categories_keyboard(
+    categories: List[Dict],
+    back_callback: str = "admin"
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура управления категориями в админке"""
+    buttons = [
+        [_create_button(cat['name'], f"admin_category_edit:{cat['id']}")] 
+        for cat in categories
+    ]
+    buttons.append([_create_button(ButtonType.CREATE.value + " категорию", "create_category")])
+    buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, back_callback)])
+    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_admin_products_keyboard(
+    categories: List[Dict],
+    back_callback: str = "admin"
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура выбора категории товаров в админке"""
+    buttons = [
+        [_create_button(cat['name'], f"admin_products_category:{cat['id']}")] 
+        for cat in categories
+    ]
+    buttons.append([_create_button(ButtonType.SEARCH.value, "admin_search_products")])
+    buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, back_callback)])
+    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_admin_products_list_keyboard(
+    products: List[Dict],
+    category_id: Optional[Union[int, str]] = None,
+    back_callback: str = "admin_products"
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура списка товаров в админке"""
+    buttons = [
+        [_create_button(prod['name'], f"admin_product_edit:{prod['id']}")] 
+        for prod in products
+    ]
+    if category_id:
+        buttons.append([_create_button(ButtonType.CREATE.value + " товар", f"create_product:{category_id}")])
+    else:
+        buttons.append([_create_button(ButtonType.CREATE.value + " товар", "create_product")])
+    buttons.append([_create_button(ButtonType.BACK_TO_CATEGORIES.value, back_callback)])
+    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_admin_tests_keyboard(
+    tests: List[Dict],
+    back_callback: str = "admin"
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура управления тестами в админке"""
+    buttons = [
+        [_create_button(test['title'], f"admin_test_edit:{test['id']}")] 
+        for test in tests
+    ]
+    buttons.append([_create_button(ButtonType.CREATE.value + " тест", "create_test")])
+    buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, back_callback)])
+    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_admin_stats_keyboard(
+    back_callback: str = "admin"
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура статистики в админке"""
+    buttons = [
+        [_create_button("👥 Пользователи", "admin_stats_users")],
+        [_create_button("📝 Тесты", "admin_stats_tests")],
+        [_create_button(ButtonType.BACK_TO_ADMIN.value, back_callback)]
+    ]
+    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_cancel_keyboard(
+    cancel_callback: str = "cancel"
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура отмены действия"""
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [_create_button("❌ Отменить", cancel_callback)]
+    ])
