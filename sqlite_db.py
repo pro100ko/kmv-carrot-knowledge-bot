@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 DB_FILE = "morkovka_bot.db"
 DB_TIMEOUT = 30  # seconds for connection timeout
 
+# Флаг доступности SQLite
+SQLITE_AVAILABLE = True
+
 # Блокировка для конкурентного доступа
 db_lock = Lock()
 
@@ -40,7 +43,13 @@ class Database:
         
         self.conn = None
         self._initialized = True
-        self._initialize_db()
+        try:
+            self._initialize_db()
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}")
+            global SQLITE_AVAILABLE
+            SQLITE_AVAILABLE = False
+            raise
 
     def _initialize_db(self):
         """Инициализация базы данных и таблиц"""
