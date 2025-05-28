@@ -2,14 +2,8 @@ import logging
 from aiogram import types
 from aiogram.enums import ParseMode
 from typing import Optional, Union
-from sqlite_db import (
-    get_user,
-    register_user,
-    get_test_attempts,
-    get_user_test_history,
-    set_admin_status
-)
-from config import ADMIN_IDS
+from sqlite_db import db  # Import the database instance
+from config import ADMIN_USER_IDS
 from utils.keyboards import get_main_keyboard
 from utils.message_utils import safe_send_message
 
@@ -26,11 +20,11 @@ class UserManager:
             'first_name': user.first_name or '',
             'last_name': user.last_name or '',
             'username': user.username or '',
-            'is_admin': user.id in ADMIN_IDS
+            'is_admin': user.id in ADMIN_USER_IDS
         }
         
         try:
-            return register_user(user_data)
+            return db.register_user(user_data)
         except Exception as e:
             logger.error(f"Failed to register user {user.id}: {e}")
             return False
@@ -38,7 +32,7 @@ class UserManager:
     @staticmethod
     def is_admin(user_id: int) -> bool:
         """Проверяет, является ли пользователь администратором"""
-        return user_id in ADMIN_IDS
+        return user_id in ADMIN_USER_IDS
 
 async def start(
     update: Union[types.Message, types.CallbackQuery],
@@ -143,7 +137,7 @@ async def get_user_profile(
     """Показывает профиль пользователя и статистику"""
     try:
         user = query.from_user
-        user_data = get_user(user.id)
+        user_data = db.get_user(user.id)
         if not user_data:
             await query.answer("Профиль не найден")
             return
@@ -159,7 +153,7 @@ async def get_user_profile(
         ]
 
         # Добавляем статистику тестов
-        attempts = get_test_attempts(user.id)
+        attempts = db.get_test_attempts(user.id)
         if attempts:
             passed = sum(1 for a in attempts if a['score'] / a['max_score'] >= 0.7)
             profile_text.extend([

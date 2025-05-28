@@ -1,4 +1,3 @@
-
 from aiogram import F, types
 import uuid
 import logging
@@ -7,12 +6,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramBadRequest
 from utils.message_utils import safe_edit_message
-from sqlite_db import (
-    add_test, get_categories, add_category,
-    get_products_by_category, get_tests_list,
-    search_products
-)
-from config import ADMIN_IDS
+from sqlite_db import db  # Import the database instance
+from config import ADMIN_USER_IDS
 from utils.keyboards import (
     get_admin_keyboard, get_admin_categories_keyboard,
     get_admin_products_keyboard, get_admin_products_list_keyboard,
@@ -49,7 +44,7 @@ class TestForm(StatesGroup):
 # ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
 async def check_admin_access(user_id: int, query: types.CallbackQuery = None) -> bool:
     """Проверяет права администратора"""
-    if user_id not in ADMIN_IDS:
+    if user_id not in ADMIN_USER_IDS:  # Updated to use ADMIN_USER_IDS
         msg = "⛔ У вас нет доступа к административной панели"
         if query:
             await query.answer(msg)
@@ -57,7 +52,7 @@ async def check_admin_access(user_id: int, query: types.CallbackQuery = None) ->
     return True
 
 async def admin_check_middleware(handler, event, data):
-    if event.from_user.id not in ADMIN_IDS:
+    if event.from_user.id not in ADMIN_USER_IDS:
         await event.answer("Доступ запрещен")
         return
     return await handler(event, data)
@@ -108,7 +103,7 @@ async def admin_categories_handler(
         return
     
     await state.clear()
-    categories = get_categories()
+    categories = db.get_categories()  # Use db instance
     
     await safe_edit_message(
         message=query.message,
@@ -149,8 +144,8 @@ async def admin_products_handler(
     if len(parts) > 1 and parts[0] == 'admin_products_category':
         # Показ товаров конкретной категории
         category_id = parts[1]
-        products = get_products_by_category(category_id)
-        category = next((c for c in get_categories() if c['id'] == category_id), None)
+        products = db.get_products_by_category(category_id)
+        category = next((c for c in db.get_categories() if c['id'] == category_id), None)
         
         text = (
             f"🍎 <b>Управление товарами</b>\n\n"
@@ -166,7 +161,7 @@ async def admin_products_handler(
         )
     else:
         # Главное меню товаров
-        categories = get_categories()
+        categories = db.get_categories()
         await safe_edit_message(
             message=query.message,
             text="🍎 <b>Управление товарами</b>\n\nВыберите категорию товаров:",
@@ -201,7 +196,7 @@ async def admin_tests_handler(
         return
     
     await state.clear()
-    tests = get_tests_list()
+    tests = db.get_tests_list()
     
     await safe_edit_message(
         message=query.message,
@@ -227,7 +222,7 @@ async def admin_stats_handler(
     if len(parts) > 2:
         if parts[2] == 'users':
             # Статистика пользователей
-            users = get_all_users()
+            users = db.get_all_users()
             admin_count = sum(1 for u in users if u.get('is_admin'))
             
             text = (
@@ -283,7 +278,7 @@ async def process_product_search(
         await message.answer("❌ Слишком короткий поисковый запрос (минимум 2 символа)")
         return
     
-    products = search_products(search_query)
+    products = db.search_products(search_query)
     
     if not products:
         await message.answer("🔎 Товары не найдены")

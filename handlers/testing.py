@@ -2,12 +2,7 @@ import logging
 from typing import Dict, Optional
 from aiogram import types
 from aiogram.enums import ParseMode
-from sqlite_db import (
-    get_tests_list,
-    get_test,
-    save_test_attempt,
-    get_test_attempts
-)
+from sqlite_db import db  # Import the database instance
 from utils.keyboards import (
     get_tests_keyboard,
     get_test_question_keyboard,
@@ -53,7 +48,7 @@ async def testing_handler(
 ) -> None:
     """Главный обработчик системы тестирования"""
     try:
-        tests = get_tests_list()
+        tests = db.get_tests_list()  # Use db instance
         if not tests:
             await handle_no_tests(update)
             return
@@ -85,7 +80,7 @@ async def test_selection_handler(
     """Обработчик выбора теста"""
     await query.answer()
     test_id = query.data.split(':')[1]
-    test = get_test(test_id)
+    test = db.get_test(test_id)  # Use db instance
     
     if not test:
         await safe_edit_message(
@@ -137,7 +132,7 @@ async def test_question_handler(
         await handle_session_expired(query)
         return
     
-    test = get_test(test_id)
+    test = db.get_test(test_id)  # Use db instance
     if not test:
         await handle_test_not_found(query)
         return
@@ -197,7 +192,7 @@ async def test_result_handler(
         await handle_session_expired(query)
         return
     
-    test = get_test(session['test_id'])
+    test = db.get_test(session['test_id'])
     if not test:
         await handle_test_not_found(query)
         return
