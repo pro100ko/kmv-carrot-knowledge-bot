@@ -278,26 +278,23 @@ class Database:
 
     # === Product Operations ===
     def add_product(self, product_data: Dict) -> Optional[int]:
-        """Добавляет новый продукт"""
-        now = datetime.now().isoformat()
-        
+        """Добавляет новый продукт с изображениями"""
         try:
             with db_lock:
-                self.conn.execute("BEGIN TRANSACTION")
                 cursor = self.conn.cursor()
                 
                 # Добавляем продукт
                 cursor.execute(
                     '''INSERT INTO products 
-                       (name, category_id, description, price_info, storage_conditions, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                       (name, description, category_id, price, is_available, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?)''',
                     (
                         product_data['name'],
-                        product_data['category_id'],
                         product_data.get('description', ''),
-                        product_data.get('price_info', ''),
-                        product_data.get('storage_conditions', ''),
-                        now, now
+                        product_data['category_id'],
+                        product_data.get('price', 0.0),
+                        product_data.get('is_available', 1),
+                        datetime.now().isoformat()
                     ))
                 
                 product_id = cursor.lastrowid
@@ -312,7 +309,6 @@ class Database:
                 return product_id
         except Exception as e:
             self.conn.rollback()
-        raise
             logger.error(f"Failed to add product: {e}")
             return None
     
@@ -332,48 +328,48 @@ class Database:
             p['image_urls'] = p['image_urls'].split(',') if p['image_urls'] else []
         return products
 
-def search_products(self, search_query: str, limit: int = 10) -> List[Dict]:
-    """
-    Поиск продуктов по названию и описанию с пагинацией
-    :param search_query: Строка для поиска
-    :param limit: Максимальное количество результатов
-    :return: Список найденных продуктов с изображениями
-    """
-    if not search_query or len(search_query.strip()) < 2:
-        return []
+    def search_products(self, search_query: str, limit: int = 10) -> List[Dict]:
+        """
+        Поиск продуктов по названию и описанию с пагинацией
+        :param search_query: Строка для поиска
+        :param limit: Максимальное количество результатов
+        :return: Список найденных продуктов с изображениями
+        """
+        if not search_query or len(search_query.strip()) < 2:
+            return []
 
-    safe_query = search_query.strip().replace("%", "").lower()
-    search_term = f"%{safe_query}%"
-    
-    try:
-        cursor = self._execute('''
-            SELECT p.*, 
-                   (SELECT GROUP_CONCAT(image_url) 
-                    FROM product_images pi 
-                    WHERE pi.product_id = p.id) as image_urls
-            FROM products p
-            WHERE LOWER(p.name) LIKE ? 
-               OR LOWER(p.description) LIKE ?
-            LIMIT ?
-        ''', (search_term, search_term, limit))
+        safe_query = search_query.strip().replace("%", "").lower()
+        search_term = f"%{safe_query}%"
         
-        products = cursor.fetchall()
+        try:
+            cursor = self._execute('''
+                SELECT p.*, 
+                       (SELECT GROUP_CONCAT(image_url) 
+                        FROM product_images pi 
+                        WHERE pi.product_id = p.id) as image_urls
+                FROM products p
+                WHERE LOWER(p.name) LIKE ? 
+                   OR LOWER(p.description) LIKE ?
+                LIMIT ?
+            ''', (search_term, search_term, limit))
+            
+            products = cursor.fetchall()
+            
+            # Преобразуем строку с URL в список
+            for product in products:
+                product['image_urls'] = (
+                    product['image_urls'].split(',') 
+                    if product['image_urls'] 
+                    else []
+                )
+            
+            return products
         
-        # Преобразуем строку с URL в список
-        for product in products:
-            product['image_urls'] = (
-                product['image_urls'].split(',') 
-                if product['image_urls'] 
-                else []
-            )
-        
-        return products
-    
-    except Exception as e:
-        logger.error(f"Product search failed for '{search_query}': {e}")
-        return []
+        except Exception as e:
+            logger.error(f"Product search failed for '{search_query}': {e}")
+            return []
 
-# === Test Operations ===
+    # === Test Operations ===
     def add_test(self, test_data: Dict) -> Optional[int]:
         """Добавляет новый тест с вопросами"""
         now = datetime.now().isoformat()
