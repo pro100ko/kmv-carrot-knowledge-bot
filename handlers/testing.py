@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, Optional
 from aiogram import types
+from aiogram.types import CallbackQuery
 from aiogram.enums import ParseMode
 from sqlite_db import db  # Import the database instance
 from utils.keyboards import (
