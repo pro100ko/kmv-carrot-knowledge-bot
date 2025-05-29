@@ -282,17 +282,8 @@ async def on_startup(application: web.Application) -> None:
             webhook_logger.info(f"Setting webhook to {webhook_url}")
             
             try:
-                # Try to set webhook with SSL certificate
-                if WEBHOOK_SSL_CERT and os.path.exists(WEBHOOK_SSL_CERT):
-                    await bot.set_webhook(
-                        url=webhook_url,
-                        certificate=open(WEBHOOK_SSL_CERT, 'rb')
-                    )
-                else:
-                    # Fallback to setting webhook without certificate
-                    webhook_logger.warning("SSL certificate not found, setting webhook without certificate")
-                    await bot.set_webhook(url=webhook_url)
-                
+                # In production, we don't need to provide a certificate as Render handles SSL
+                await bot.set_webhook(url=webhook_url)
                 webhook_logger.info("Webhook set successfully")
             except Exception as e:
                 webhook_logger.error(f"Failed to set webhook: {e}")
@@ -374,12 +365,11 @@ def main() -> None:
             webhook_logger.info("Starting in production mode with webhook")
             setup_application(app, dp, bot=bot)
             
-            # Start webhook server
+            # Start webhook server - no SSL context needed as Render handles SSL
             web.run_app(
                 app,
                 host=WEBAPP_HOST,
-                port=WEBAPP_PORT,
-                ssl_context=WEBHOOK_SSL_CERT if os.path.exists(WEBHOOK_SSL_CERT) else None
+                port=WEBAPP_PORT
             )
         else:
             # Development mode with polling

@@ -24,7 +24,5 @@ services:
         value: 0.0.0.0
       - key: WEBAPP_PORT
         value: $PORT
-      - key: WEBHOOK_SSL_CERT
-        value: /etc/ssl/certs/ca-certificates.crt  # System SSL certificates
     healthCheckPath: /health
     autoDeploy: true 
