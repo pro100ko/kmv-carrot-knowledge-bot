@@ -275,15 +275,14 @@ async def on_startup(application: web.Application) -> None:
         
         # Set webhook in production
         if ENVIRONMENT == "production":
-            if not WEBHOOK_HOST:
-                raise ValueError("WEBHOOK_HOST is required in production mode")
+            if not WEBHOOK_URL:
+                raise ValueError("WEBHOOK_URL is required in production mode")
             
-            webhook_url = f"https://{WEBHOOK_HOST}{WEBHOOK_PATH}"
-            webhook_logger.info(f"Setting webhook to {webhook_url}")
+            webhook_logger.info(f"Setting webhook to {WEBHOOK_URL}")
             
             try:
                 # In production, we don't need to provide a certificate as Render handles SSL
-                await bot.set_webhook(url=webhook_url)
+                await bot.set_webhook(url=WEBHOOK_URL)
                 webhook_logger.info("Webhook set successfully")
             except Exception as e:
                 webhook_logger.error(f"Failed to set webhook: {e}")

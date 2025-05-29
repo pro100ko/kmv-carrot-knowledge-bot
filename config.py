@@ -22,6 +22,8 @@ elif WEBHOOK_HOST and WEBHOOK_HOST.startswith("http://"):
     WEBHOOK_HOST = WEBHOOK_HOST[7:]  # Remove http:// prefix if present
 
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", f"/webhook/{BOT_TOKEN}")
+WEBHOOK_URL = f"https://{WEBHOOK_HOST}{WEBHOOK_PATH}" if WEBHOOK_HOST else None  # Construct full webhook URL
+
 # SSL certificate handling
 WEBHOOK_SSL_CERT = os.getenv("WEBHOOK_SSL_CERT")  # Optional in production as Render handles SSL
 WEBAPP_HOST = os.getenv("WEBAPP_HOST", "0.0.0.0")
