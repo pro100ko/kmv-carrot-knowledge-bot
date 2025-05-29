@@ -14,7 +14,10 @@ services:
       - key: ADMIN_IDS
         sync: false
       - key: WEBHOOK_HOST
-        value: kmv-carrot-knowledge-bot.onrender.com  # Render's default domain
+        fromService:
+          type: web
+          name: kmv-carrot-knowledge-bot
+          envVarKey: RENDER_EXTERNAL_URL
       - key: WEBHOOK_PATH
         value: /webhook
       - key: WEBAPP_HOST

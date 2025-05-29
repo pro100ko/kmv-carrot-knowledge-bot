@@ -15,7 +15,12 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 IS_PRODUCTION = ENVIRONMENT == "production"
 
 # Webhook settings (for production)
-WEBHOOK_HOST = os.getenv("WEBHOOK_HOST")  # e.g., "example.com"
+WEBHOOK_HOST = os.getenv("WEBHOOK_HOST") or os.getenv("RENDER_EXTERNAL_URL")  # Try both variables
+if WEBHOOK_HOST and WEBHOOK_HOST.startswith("https://"):
+    WEBHOOK_HOST = WEBHOOK_HOST[8:]  # Remove https:// prefix if present
+elif WEBHOOK_HOST and WEBHOOK_HOST.startswith("http://"):
+    WEBHOOK_HOST = WEBHOOK_HOST[7:]  # Remove http:// prefix if present
+
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", f"/webhook/{BOT_TOKEN}")
 WEBHOOK_SSL_CERT = os.getenv("WEBHOOK_SSL_CERT")  # Path to SSL certificate
 WEBAPP_HOST = os.getenv("WEBAPP_HOST", "0.0.0.0")
@@ -90,7 +95,10 @@ def validate_config() -> None:
     
     if IS_PRODUCTION:
         if not WEBHOOK_HOST:
-            raise ValueError("WEBHOOK_HOST is required in production mode")
+            raise ValueError(
+                "WEBHOOK_HOST or RENDER_EXTERNAL_URL is required in production mode. "
+                "Please ensure the environment variable is set in your Render dashboard."
+            )
         if not WEBHOOK_SSL_CERT:
             raise ValueError("WEBHOOK_SSL_CERT is required in production mode")
     
