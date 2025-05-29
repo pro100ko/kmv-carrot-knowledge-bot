@@ -35,8 +35,9 @@ ADMIN_IDS: List[int] = [
 ]
 
 # Database settings
-DB_FILE = os.getenv("DB_FILE", "morkovka_bot.db")
-DB_BACKUP_DIR = os.getenv("DB_BACKUP_DIR", "backups")
+DB_DIR = os.getenv("DB_DIR", "data")  # Directory for database files
+DB_FILE = os.path.join(DB_DIR, os.getenv("DB_FILE", "morkovka_bot.db"))
+DB_BACKUP_DIR = os.getenv("DB_BACKUP_DIR", os.path.join(DB_DIR, "backups"))
 DB_BACKUP_KEEP_DAYS = int(os.getenv("DB_BACKUP_KEEP_DAYS", "30"))
 
 # Logging settings
@@ -100,21 +101,19 @@ def validate_config() -> None:
                 "WEBHOOK_HOST or RENDER_EXTERNAL_URL is required in production mode. "
                 "Please ensure the environment variable is set in your Render dashboard."
             )
-        # Remove SSL certificate requirement as Render handles SSL
-        # if not WEBHOOK_SSL_CERT:
-        #     raise ValueError("WEBHOOK_SSL_CERT is required in production mode")
     
     if not ADMIN_IDS:
         raise ValueError("At least one ADMIN_ID is required")
     
-    if not os.path.exists(DB_FILE) and not os.path.exists(os.path.dirname(DB_FILE)):
-        os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
+    # Create necessary directories
+    os.makedirs(DB_DIR, exist_ok=True)
+    os.makedirs(DB_BACKUP_DIR, exist_ok=True)
+    os.makedirs(LOG_DIR, exist_ok=True)
     
-    if not os.path.exists(DB_BACKUP_DIR):
-        os.makedirs(DB_BACKUP_DIR, exist_ok=True)
-    
-    if not os.path.exists(LOG_DIR):
-        os.makedirs(LOG_DIR, exist_ok=True)
+    # Ensure database file directory exists
+    db_dir = os.path.dirname(DB_FILE)
+    if db_dir:  # Only create if there's a directory path
+        os.makedirs(db_dir, exist_ok=True)
 
 # Validate configuration on import
 validate_config()
