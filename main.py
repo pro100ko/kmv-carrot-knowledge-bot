@@ -274,14 +274,29 @@ async def on_startup(application: web.Application) -> None:
         register_middlewares(dp)
         
         # Set webhook in production
-        if WEBHOOK_HOST:
+        if ENVIRONMENT == "production":
+            if not WEBHOOK_HOST:
+                raise ValueError("WEBHOOK_HOST is required in production mode")
+            
             webhook_url = f"https://{WEBHOOK_HOST}{WEBHOOK_PATH}"
             webhook_logger.info(f"Setting webhook to {webhook_url}")
             
-            await bot.set_webhook(
-                url=webhook_url,
-                certificate=open(WEBHOOK_SSL_CERT, 'rb') if WEBHOOK_SSL_CERT else None
-            )
+            try:
+                # Try to set webhook with SSL certificate
+                if WEBHOOK_SSL_CERT and os.path.exists(WEBHOOK_SSL_CERT):
+                    await bot.set_webhook(
+                        url=webhook_url,
+                        certificate=open(WEBHOOK_SSL_CERT, 'rb')
+                    )
+                else:
+                    # Fallback to setting webhook without certificate
+                    webhook_logger.warning("SSL certificate not found, setting webhook without certificate")
+                    await bot.set_webhook(url=webhook_url)
+                
+                webhook_logger.info("Webhook set successfully")
+            except Exception as e:
+                webhook_logger.error(f"Failed to set webhook: {e}")
+                raise
             
             # Create admin users if needed
             for admin_id in ADMIN_IDS:
@@ -353,10 +368,10 @@ def main() -> None:
         # Add webhook handler
         app.router.add_post(WEBHOOK_PATH, webhook_handler)
         
-        # Setup webhook
-        if WEBHOOK_HOST:
+        # Setup webhook or polling based on environment
+        if ENVIRONMENT == "production":
             # Production mode with webhook
-            webhook_logger.info("Starting in webhook mode")
+            webhook_logger.info("Starting in production mode with webhook")
             setup_application(app, dp, bot=bot)
             
             # Start webhook server
@@ -364,11 +379,11 @@ def main() -> None:
                 app,
                 host=WEBAPP_HOST,
                 port=WEBAPP_PORT,
-                ssl_context=WEBHOOK_SSL_CERT
+                ssl_context=WEBHOOK_SSL_CERT if os.path.exists(WEBHOOK_SSL_CERT) else None
             )
         else:
             # Development mode with polling
-            app_logger.info("Starting in polling mode")
+            app_logger.info("Starting in development mode with polling")
             
             async def start_polling():
                 await dp.start_polling(bot)
