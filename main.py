@@ -372,13 +372,27 @@ def main() -> None:
             webhook_logger.info(f"Starting in production mode with webhook on port {WEBAPP_PORT}")
             setup_application(app, dp, bot=bot)
             
-            # Start webhook server - no SSL context needed as Render handles SSL
-            web.run_app(
-                app,
-                host=WEBAPP_HOST,
-                port=WEBAPP_PORT,
-                access_log=app_logger
-            )
+            # Create runner with explicit port binding
+            runner = web.AppRunner(app)
+            
+            async def start_server():
+                await runner.setup()
+                site = web.TCPSite(
+                    runner,
+                    host=WEBAPP_HOST,
+                    port=WEBAPP_PORT,
+                    reuse_port=True
+                )
+                await site.start()
+                app_logger.info(f"Server started at http://{WEBAPP_HOST}:{WEBAPP_PORT}")
+                
+                # Keep the server running
+                while True:
+                    await asyncio.sleep(3600)  # Sleep for an hour
+            
+            # Start the server
+            asyncio.run(start_server())
+            
         else:
             # Development mode with polling
             app_logger.info("Starting in development mode with polling")
