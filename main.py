@@ -262,6 +262,9 @@ async def register_handlers():
 async def on_startup(application: web.Application) -> None:
     """Initialize bot on startup"""
     try:
+        # Log port information
+        app_logger.info(f"Starting application on port {WEBAPP_PORT}")
+        
         # Initialize database
         if not db.check_database_integrity():
             app_logger.error("Database integrity check failed")
@@ -358,17 +361,23 @@ def main() -> None:
         # Add webhook handler
         app.router.add_post(WEBHOOK_PATH, webhook_handler)
         
+        # Add health check endpoint
+        async def health_check(request):
+            return web.Response(text="OK")
+        app.router.add_get("/health", health_check)
+        
         # Setup webhook or polling based on environment
         if ENVIRONMENT == "production":
             # Production mode with webhook
-            webhook_logger.info("Starting in production mode with webhook")
+            webhook_logger.info(f"Starting in production mode with webhook on port {WEBAPP_PORT}")
             setup_application(app, dp, bot=bot)
             
             # Start webhook server - no SSL context needed as Render handles SSL
             web.run_app(
                 app,
                 host=WEBAPP_HOST,
-                port=WEBAPP_PORT
+                port=WEBAPP_PORT,
+                access_log=app_logger
             )
         else:
             # Development mode with polling
