@@ -22,21 +22,39 @@ class LoggingMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
-        # Log the update
+        # Log the update with more details
         if isinstance(event, Update):
             if event.message:
-                logger.info(f"Received message from user {event.message.from_user.id}: {event.message.text}")
+                logger.info(
+                    f"Received message from user {event.message.from_user.id}: "
+                    f"text='{event.message.text}', "
+                    f"message_id={event.message.message_id}"
+                )
             elif event.callback_query:
-                logger.info(f"Received callback query from user {event.callback_query.from_user.id}: {event.callback_query.data}")
+                logger.info(
+                    f"Received callback query from user {event.callback_query.from_user.id}: "
+                    f"data='{event.callback_query.data}', "
+                    f"message_id={event.callback_query.message.message_id if event.callback_query.message else 'N/A'}"
+                )
             else:
                 logger.info(f"Received update: {event}")
         
         try:
             # Process the update
-            return await handler(event, data)
+            result = await handler(event, data)
+            logger.debug(f"Handler {handler.__name__} completed successfully")
+            return result
         except Exception as e:
-            # Log any errors
-            logger.error(f"Error processing update: {e}", exc_info=True)
+            # Log any errors with full context
+            logger.error(
+                f"Error in handler {handler.__name__}: {e}",
+                exc_info=True,
+                extra={
+                    "handler": handler.__name__,
+                    "event": event,
+                    "error": str(e)
+                }
+            )
             raise
 
 class ErrorHandlerMiddleware(BaseMiddleware):
@@ -51,21 +69,30 @@ class ErrorHandlerMiddleware(BaseMiddleware):
         try:
             return await handler(event, data)
         except TelegramBadRequest as e:
-            if "message is not modified" in str(e):
-                # Ignore "message is not modified" errors
+            error_msg = str(e)
+            if "message is not modified" in error_msg:
                 logger.debug(f"Ignoring 'message is not modified' error: {e}")
                 return None
-            elif "message to edit not found" in str(e):
-                # Handle deleted messages
+            elif "message to edit not found" in error_msg:
                 logger.warning(f"Message to edit not found: {e}")
                 return None
+            elif "bot was blocked by the user" in error_msg:
+                user_id = event.message.from_user.id if hasattr(event, 'message') else 'unknown'
+                logger.warning(f"Bot was blocked by user {user_id}")
+                return None
             else:
-                # Log other Telegram errors
-                logger.error(f"Telegram error: {e}", exc_info=True)
+                logger.error(f"Telegram error in {handler.__name__}: {e}", exc_info=True)
                 raise
         except Exception as e:
-            # Log other errors
-            logger.error(f"Error in handler: {e}", exc_info=True)
+            logger.error(
+                f"Error in handler {handler.__name__}: {e}",
+                exc_info=True,
+                extra={
+                    "handler": handler.__name__,
+                    "event": event,
+                    "error": str(e)
+                }
+            )
             raise
 
 # Register middlewares
@@ -74,36 +101,42 @@ dp.update.middleware(ErrorHandlerMiddleware())
 
 # Global error handler
 @dp.errors()
-async def global_error_handler(update: Optional[Update], exception: Exception) -> bool:
-    """Global error handler for all unhandled exceptions"""
-    if isinstance(exception, TelegramBadRequest):
-        if "message is not modified" in str(exception):
-            return True
-        elif "message to edit not found" in str(exception):
-            return True
-        elif "bot was blocked by the user" in str(exception):
-            logger.warning(f"Bot was blocked by user: {update.message.from_user.id if update and update.message else 'unknown'}")
-            return True
-    
-    # Log the error
-    logger.error(
-        f"Update {update} caused error {exception}",
-        exc_info=True,
-        extra={
-            "update": update,
-            "exception": exception
-        }
-    )
-    
-    # Try to notify the user if possible
-    if update and update.message:
-        try:
-            await update.message.answer(
-                "Произошла ошибка при обработке вашего запроса. "
+async def errors_handler(event: TelegramObject, exception: Exception) -> bool:
+    """Global error handler with detailed logging"""
+    try:
+        # Get update details
+        update_type = type(event).__name__
+        user_id = event.from_user.id if hasattr(event, 'from_user') else 'unknown'
+        message_id = event.message.message_id if hasattr(event, 'message') else 'unknown'
+        callback_data = event.callback_query.data if hasattr(event, 'callback_query') else 'unknown'
+        
+        # Log the error with full context
+        logger.error(
+            f"Update caused error: {exception}",
+            exc_info=True,
+            extra={
+                "update_type": update_type,
+                "user_id": user_id,
+                "message_id": message_id,
+                "callback_data": callback_data,
+                "exception_type": type(exception).__name__,
+                "exception_args": getattr(exception, 'args', None)
+            }
+        )
+        
+        # Try to notify the user
+        if hasattr(event, 'message'):
+            await event.message.answer(
+                "⚠️ Произошла ошибка при обработке вашего запроса.\n"
                 "Пожалуйста, попробуйте позже или обратитесь к администратору."
             )
-        except Exception as e:
-            logger.error(f"Failed to send error message to user: {e}", exc_info=True)
+        elif hasattr(event, 'callback_query'):
+            await event.callback_query.answer(
+                "⚠️ Произошла ошибка. Пожалуйста, попробуйте позже.",
+                show_alert=True
+            )
+    except Exception as e:
+        logger.error(f"Error in error handler: {e}", exc_info=True)
     
     return True
 
@@ -112,19 +145,28 @@ async def global_error_handler(update: Optional[Update], exception: Exception) -
 async def unhandled_update_handler(update: Update) -> None:
     """Handle updates that don't match any registered handlers"""
     if update.message:
-        logger.warning(f"Unhandled message from user {update.message.from_user.id}: {update.message.text}")
+        logger.warning(
+            f"Unhandled message from user {update.message.from_user.id}: "
+            f"text='{update.message.text}', "
+            f"message_id={update.message.message_id}"
+        )
         try:
             await update.message.answer(
-                "Извините, я не понял эту команду. "
+                "⚠️ Извините, я не понял эту команду.\n"
                 "Используйте /start для начала работы или /help для получения справки."
             )
         except Exception as e:
             logger.error(f"Failed to send help message: {e}", exc_info=True)
     elif update.callback_query:
-        logger.warning(f"Unhandled callback query from user {update.callback_query.from_user.id}: {update.callback_query.data}")
+        logger.warning(
+            f"Unhandled callback query from user {update.callback_query.from_user.id}: "
+            f"data='{update.callback_query.data}', "
+            f"message_id={update.callback_query.message.message_id if update.callback_query.message else 'N/A'}"
+        )
         try:
             await update.callback_query.answer(
-                "Эта кнопка больше не активна. Пожалуйста, обновите меню командой /start",
+                "⚠️ Эта кнопка больше не активна.\n"
+                "Пожалуйста, обновите меню командой /start",
                 show_alert=True
             )
         except Exception as e:

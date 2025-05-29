@@ -3,7 +3,7 @@ import os
 import sys
 import time
 import asyncio
-from typing import Optional
+from typing import Optional, Callable, Dict, Any
 
 # Add project root to Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -16,13 +16,20 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.filters.command import Command, CommandStart
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
+from aiohttp import ClientSession
+from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 
 # Local imports
 from config import (
     BOT_TOKEN,
     WEBHOOK_URL,
     WEBHOOK_PATH,
-    ENVIRONMENT
+    ENVIRONMENT,
+    WEBHOOK_HOST,
+    WEBHOOK_SSL_CERT,
+    WEBAPP_HOST,
+    WEBAPP_PORT,
+    ADMIN_IDS
 )
 from dispatcher import dp
 from handlers import (
@@ -56,12 +63,31 @@ from handlers.user_management import (
     start,
     register_user_handler
 )
+from logging_config import (
+    app_logger,
+    webhook_logger,
+    setup_logging,
+    cleanup_old_logs,
+    get_logger
+)
+from middleware import register_middlewares
+from sqlite_db import db
+from admin_handlers import router as admin_router
+from category_management import router as category_router
+from product_management import router as product_router
+from test_management import router as test_router
+from user_management import router as user_router
+from statistics import router as stats_router
+from system_tests import run_system_tests
 
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
-    stream=sys.stdout,
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('bot.log', mode='a', encoding='utf-8')
+    ],
     force=True  # Force reconfiguration of logging
 )
 
@@ -72,16 +98,17 @@ logger.setLevel(logging.INFO)
 # Add file handler for persistent logging
 if ENVIRONMENT == "production":
     log_file = "bot.log"
-    file_handler = logging.FileHandler(log_file)
+    file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
     file_handler.setFormatter(logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     ))
     logger.addHandler(file_handler)
 
-# Initialize bot
+# Initialize bot with more detailed logging
 bot = Bot(
     token=BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    session=ClientSession()  # Use aiohttp ClientSession for better logging
 )
 
 # Initialize SQLite
@@ -99,208 +126,265 @@ except Exception as e:
     logger.error("Bot cannot work without database")
     sys.exit(1)
 
+# Add callback answer middleware
+dp.callback_query.middleware(CallbackAnswerMiddleware())
+
 # Register handlers
-def register_handlers():
-    """Register all handlers with the dispatcher"""
-    # Command handlers
-    dp.message.register(start_command, CommandStart())
-    dp.message.register(start_command, Command("help"))
-    dp.message.register(any_message)
+async def register_handlers():
+    """Register all message and callback handlers"""
+    # Include routers
+    dp.include_router(admin_router)
+    dp.include_router(category_router)
+    dp.include_router(product_router)
+    dp.include_router(test_router)
+    dp.include_router(user_router)
+    dp.include_router(stats_router)
     
-    # Knowledge base handlers
-    dp.callback_query.register(kb_callback, F.data == "knowledge_base")
-    dp.callback_query.register(cat_callback, F.data.startswith("category:"))
-    dp.callback_query.register(prod_callback, F.data.startswith("product:"))
+    # Register basic commands
+    @dp.message(Command("start"))
+    async def start_command(message: types.Message):
+        """Handle /start command"""
+        try:
+            # Register user
+            user_data = {
+                'telegram_id': message.from_user.id,
+                'first_name': message.from_user.first_name,
+                'last_name': message.from_user.last_name,
+                'username': message.from_user.username
+            }
+            db.register_user(user_data)
+            
+            # Send welcome message
+            welcome_text = (
+                "👋 Добро пожаловать в бот Морковка!\n\n"
+                "Я помогу вам узнать больше о наших продуктах и пройти тестирование.\n\n"
+                "Доступные команды:\n"
+                "/help - Показать справку\n"
+                "/search - Поиск продуктов\n"
+                "/tests - Список тестов\n"
+                "/profile - Ваш профиль"
+            )
+            
+            if message.from_user.id in ADMIN_IDS:
+                welcome_text += "\n\nАдминистративные команды:\n"
+                welcome_text += "/admin - Панель администратора\n"
+                welcome_text += "/stats - Статистика\n"
+                welcome_text += "/export_stats - Экспорт статистики"
+            
+            await message.answer(welcome_text)
+            logger.info(f"User {message.from_user.id} started the bot")
+            
+        except Exception as e:
+            logger.error(f"Error in start command: {e}")
+            await message.answer("Произошла ошибка. Пожалуйста, попробуйте позже.")
     
-    # Testing handlers
-    dp.callback_query.register(testing_callback, F.data == "testing")
-    dp.callback_query.register(test_select_callback, F.data.startswith("test_select:"))
-    dp.callback_query.register(test_answer_callback, F.data.startswith("test_answer:"))
-    dp.callback_query.register(test_result_callback, F.data.startswith("test_result:"))
+    @dp.message(Command("help"))
+    async def help_command(message: types.Message):
+        """Handle /help command"""
+        try:
+            help_text = (
+                "📚 Справка по командам бота:\n\n"
+                "Основные команды:\n"
+                "/start - Начать работу с ботом\n"
+                "/help - Показать эту справку\n"
+                "/search - Поиск продуктов\n"
+                "/tests - Список доступных тестов\n"
+                "/profile - Ваш профиль и статистика\n\n"
+                "Поиск продуктов:\n"
+                "• Используйте /search для поиска продуктов\n"
+                "• Введите название или описание продукта\n"
+                "• Минимальная длина запроса: 3 символа\n\n"
+                "Тестирование:\n"
+                "• Используйте /tests для просмотра доступных тестов\n"
+                "• Выберите тест для начала\n"
+                "• Отвечайте на вопросы в течение отведенного времени\n"
+                "• Получите результаты и объяснения после завершения"
+            )
+            
+            if message.from_user.id in ADMIN_IDS:
+                help_text += "\n\nАдминистративные команды:\n"
+                help_text += "/admin - Панель администратора\n"
+                help_text += "/stats - Просмотр статистики\n"
+                help_text += "/export_stats - Экспорт статистики в Excel\n"
+                help_text += "/system_test - Запуск системных тестов"
+            
+            await message.answer(help_text)
+            logger.info(f"User {message.from_user.id} requested help")
+            
+        except Exception as e:
+            logger.error(f"Error in help command: {e}")
+            await message.answer("Произошла ошибка. Пожалуйста, попробуйте позже.")
     
-    # Admin handlers
-    dp.callback_query.register(admin_callback, F.data == "admin")
-    dp.callback_query.register(admin_cat_callback, F.data.startswith("admin_categories"))
-    dp.callback_query.register(admin_prod_callback, F.data.startswith("admin_products"))
-    dp.callback_query.register(admin_test_callback, F.data.startswith("admin_tests"))
-    dp.callback_query.register(admin_stats_callback, F.data.startswith("admin_stats"))
+    @dp.message(Command("system_test"))
+    async def system_test_command(message: types.Message):
+        """Handle /system_test command"""
+        if message.from_user.id not in ADMIN_IDS:
+            await message.answer("⛔ У вас нет доступа к этой команде.")
+            return
+        
+        try:
+            # Send initial message
+            status_message = await message.answer("🔄 Запуск системных тестов...")
+            
+            # Run tests
+            await run_system_tests()
+            
+            # Update status message
+            await status_message.edit_text("✅ Системные тесты успешно завершены!")
+            logger.info(f"Admin {message.from_user.id} ran system tests")
+            
+        except Exception as e:
+            logger.error(f"Error in system test command: {e}")
+            await message.answer("❌ Ошибка при выполнении системных тестов.")
     
-    # Search handlers
-    dp.message.register(search_command, F.text == "🔍 Поиск")
-    dp.message.register(search_query_command, F.text.startswith("🔍 "))
-    
-    # Logging callback queries
-    dp.callback_query.register(log_callback_queries)
-
-# Command handlers
-async def start_command(message: types.Message):
-    logger.info(f"Start command from user {message.from_user.id}")
-    await start(message, None)
-
-async def any_message(message: types.Message):
-    logger.info(f"Message from user {message.from_user.id}: {message.text}")
-    await register_user_handler(message, None)
-
-# Callback handlers
-async def kb_callback(callback_query: types.CallbackQuery):
-    logger.info(f"Knowledge base callback from user {callback_query.from_user.id}")
-    await knowledge_base_handler(callback_query, None)
-
-async def cat_callback(callback_query: types.CallbackQuery):
-    logger.info(f"Category callback from user {callback_query.from_user.id}: {callback_query.data}")
-    await category_handler(callback_query, None)
-
-async def prod_callback(callback_query: types.CallbackQuery):
-    logger.info(f"Product callback from user {callback_query.from_user.id}: {callback_query.data}")
-    await product_handler(callback_query, None)
-
-async def testing_callback(callback_query: types.CallbackQuery):
-    logger.info(f"Testing callback from user {callback_query.from_user.id}")
-    await testing_handler(callback_query, None)
-
-async def test_select_callback(callback_query: types.CallbackQuery):
-    logger.info(f"Test selection callback from user {callback_query.from_user.id}: {callback_query.data}")
-    await test_selection_handler(callback_query, None)
-
-async def test_answer_callback(callback_query: types.CallbackQuery):
-    logger.info(f"Test answer callback from user {callback_query.from_user.id}: {callback_query.data}")
-    await test_question_handler(callback_query, None)
-
-async def test_result_callback(callback_query: types.CallbackQuery):
-    logger.info(f"Test result callback from user {callback_query.from_user.id}: {callback_query.data}")
-    await test_result_handler(callback_query, None)
-
-async def admin_callback(callback_query: types.CallbackQuery):
-    logger.info(f"Admin callback from user {callback_query.from_user.id}")
-    await admin_handler(callback_query, None)
-
-async def admin_cat_callback(callback_query: types.CallbackQuery):
-    logger.info(f"Admin category callback from user {callback_query.from_user.id}: {callback_query.data}")
-    await admin_categories_handler(callback_query, None)
-
-async def admin_prod_callback(callback_query: types.CallbackQuery):
-    logger.info(f"Admin product callback from user {callback_query.from_user.id}: {callback_query.data}")
-    await admin_products_handler(callback_query, None)
-
-async def admin_test_callback(callback_query: types.CallbackQuery):
-    logger.info(f"Admin test callback from user {callback_query.from_user.id}: {callback_query.data}")
-    await admin_tests_handler(callback_query, None)
-
-async def admin_stats_callback(callback_query: types.CallbackQuery):
-    logger.info(f"Admin stats callback from user {callback_query.from_user.id}: {callback_query.data}")
-    await admin_stats_handler(callback_query, None)
-
-async def search_command(message: types.Message):
-    logger.info(f"Search command from user {message.from_user.id}")
-    await search_handler(message, None)
-
-async def search_query_command(message: types.Message):
-    logger.info(f"Search query from user {message.from_user.id}: {message.text}")
-    await search_handler(message, None)
-
-async def log_callback_queries(callback: types.CallbackQuery):
-    logger.info(f"Callback query from user {callback.from_user.id}: {callback.data}")
-    await callback.answer()
+    @dp.message()
+    async def any_message(message: types.Message):
+        """Handle any other message"""
+        try:
+            # Register user activity
+            db.register_user({
+                'telegram_id': message.from_user.id,
+                'first_name': message.from_user.first_name,
+                'last_name': message.from_user.last_name,
+                'username': message.from_user.username
+            })
+            
+            # Log message
+            logger.info(
+                f"User {message.from_user.id} sent message: {message.text[:100]}"
+                + ("..." if len(message.text) > 100 else "")
+            )
+            
+        except Exception as e:
+            logger.error(f"Error processing message: {e}")
 
 # Startup and shutdown handlers
-async def on_startup(bot: Bot) -> None:
-    """Actions on bot startup"""
-    logger.info("Starting bot...")
-    if ENVIRONMENT == "production":
-        try:
-            # Remove existing webhook
-            await bot.delete_webhook(drop_pending_updates=True)
-            logger.info("Removed existing webhook")
+async def on_startup(application: web.Application) -> None:
+    """Initialize bot on startup"""
+    try:
+        # Initialize database
+        if not db.check_database_integrity():
+            app_logger.error("Database integrity check failed")
+            raise RuntimeError("Database integrity check failed")
+        
+        # Register handlers
+        await register_handlers()
+        
+        # Register middlewares
+        register_middlewares(dp)
+        
+        # Set webhook in production
+        if WEBHOOK_HOST:
+            webhook_url = f"https://{WEBHOOK_HOST}{WEBHOOK_PATH}"
+            webhook_logger.info(f"Setting webhook to {webhook_url}")
             
-            # Set new webhook
             await bot.set_webhook(
-                url=WEBHOOK_URL,
-                allowed_updates=["message", "callback_query", "inline_query"],
-                drop_pending_updates=True
+                url=webhook_url,
+                certificate=open(WEBHOOK_SSL_CERT, 'rb') if WEBHOOK_SSL_CERT else None
             )
-            logger.info(f"Webhook set to {WEBHOOK_URL}")
-        except Exception as e:
-            logger.error(f"Failed to set webhook: {e}", exc_info=True)
-            raise
-    else:
-        logger.info("Running in development mode (polling)")
+            
+            # Create admin users if needed
+            for admin_id in ADMIN_IDS:
+                user = db.get_user(admin_id)
+                if not user or not user.get('is_admin'):
+                    db.register_user({
+                        'telegram_id': admin_id,
+                        'is_admin': 1
+                    })
+                    app_logger.info(f"Created admin user: {admin_id}")
+        
+        # Log bot info
+        bot_info = await bot.get_me()
+        app_logger.info(
+            f"Bot started: @{bot_info.username} "
+            f"(ID: {bot_info.id}, Name: {bot_info.full_name})"
+        )
+        
+        # Cleanup old logs
+        cleanup_old_logs()
+        
+    except Exception as e:
+        app_logger.error(f"Startup failed: {e}", exc_info=True)
+        raise
 
-async def on_shutdown(bot: Bot) -> None:
-    """Actions on bot shutdown"""
-    logger.info("Shutting down bot...")
-    if ENVIRONMENT == "production":
-        await bot.delete_webhook()
-        logger.info("Webhook removed")
-    await bot.session.close()
+async def on_shutdown(application: web.Application) -> None:
+    """Cleanup on shutdown"""
+    try:
+        # Remove webhook
+        if WEBHOOK_HOST:
+            webhook_logger.info("Removing webhook")
+            await bot.delete_webhook()
+        
+        # Close database connection
+        app_logger.info("Closing database connection")
+        db.close()
+        
+        # Close bot session
+        app_logger.info("Closing bot session")
+        await bot.session.close()
+        
+    except Exception as e:
+        app_logger.error(f"Shutdown failed: {e}", exc_info=True)
+        raise
 
-# Main application setup
-async def main() -> None:
+async def webhook_handler(request: web.Request) -> web.Response:
+    """Handle incoming webhook requests"""
+    try:
+        update = types.Update.model_validate(await request.json())
+        webhook_logger.debug(f"Received update: {update.model_dump_json()}")
+        
+        await dp.feed_update(bot, update)
+        return web.Response()
+        
+    except Exception as e:
+        webhook_logger.error(f"Webhook handler error: {e}", exc_info=True)
+        return web.Response(status=500)
+
+def main() -> None:
     """Main function to run the bot"""
     try:
-        # Register all handlers
-        register_handlers()
+        # Create application
+        app = web.Application()
         
-        # Set up startup and shutdown handlers
-        dp.startup.register(on_startup)
-        dp.shutdown.register(on_shutdown)
+        # Add startup and shutdown handlers
+        app.on_startup.append(on_startup)
+        app.on_shutdown.append(on_shutdown)
         
-        if ENVIRONMENT == "production":
-            # Webhook mode
-            app = web.Application()
-            
-            # Health check endpoint
-            async def health_check(request: web.Request) -> web.Response:
-                return web.Response(text="OK")
-            
-            app.router.add_get("/health", health_check)
-            
-            # Webhook handler
-            webhook_handler = SimpleRequestHandler(
-                dispatcher=dp,
-                bot=bot,
-                webhook_path=WEBHOOK_PATH
-            )
-            webhook_handler.register(app, path=WEBHOOK_PATH)
-            
-            # Set up application
+        # Add webhook handler
+        app.router.add_post(WEBHOOK_PATH, webhook_handler)
+        
+        # Setup webhook
+        if WEBHOOK_HOST:
+            # Production mode with webhook
+            webhook_logger.info("Starting in webhook mode")
             setup_application(app, dp, bot=bot)
             
-            # Run webhook
-            runner = web.AppRunner(app)
-            await runner.setup()
-            site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", 8000)))
-            await site.start()
-            
-            logger.info("Bot started in webhook mode")
-            
-            # Keep the application running
-            while True:
-                await asyncio.sleep(3600)
+            # Start webhook server
+            web.run_app(
+                app,
+                host=WEBAPP_HOST,
+                port=WEBAPP_PORT,
+                ssl_context=WEBHOOK_SSL_CERT
+            )
         else:
-            # Polling mode
-            logger.info("Starting bot in polling mode...")
-            await dp.start_polling(bot)
+            # Development mode with polling
+            app_logger.info("Starting in polling mode")
+            
+            async def start_polling():
+                await dp.start_polling(bot)
+            
+            # Run polling
+            asyncio.run(start_polling())
             
     except Exception as e:
-        logger.error(f"Critical error in main: {e}", exc_info=True)
+        app_logger.error(f"Application failed: {e}", exc_info=True)
         raise
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot stopped")
-    except Exception as e:
-        logger.error(f"Bot stopped due to error: {e}", exc_info=True)
-        sys.exit(1)
-
-@dp.errors()
-async def errors_handler(update: types.Update, exception: Exception):
-    logger.error(f"Update {update} caused error: {exception}")
-    return True  # Подавляем ошибку
+    main()
 
 @dp.middleware()
-async def timing_middleware(handler, event, data):
+async def timing_middleware(handler: Callable, event: types.Update, data: Dict[str, Any]):
     start = time.time()
     try:
         return await handler(event, data)

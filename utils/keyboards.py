@@ -226,12 +226,24 @@ def get_admin_categories_keyboard(
     back_callback: str = "admin"
 ) -> types.InlineKeyboardMarkup:
     """Клавиатура управления категориями"""
-    buttons = [
-        [_create_button(cat['name'], f"admin_category_edit:{cat['id']}")] 
-        for cat in categories
-    ]
-    buttons.append([_create_button(ButtonType.CREATE.value + " категорию", "create_category")])
-    buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, "admin")])
+    buttons = []
+    
+    # Добавляем кнопки категорий
+    for cat in categories:
+        buttons.append([
+            _create_button(cat['name'], f"admin_category_edit:{cat['id']}")
+        ])
+    
+    # Добавляем кнопку создания
+    buttons.append([
+        _create_button(ButtonType.CREATE.value + " категорию", "create_category")
+    ])
+    
+    # Добавляем кнопку возврата
+    buttons.append([
+        _create_button(ButtonType.BACK_TO_ADMIN.value, back_callback)
+    ])
+    
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_admin_products_keyboard(
@@ -239,27 +251,50 @@ def get_admin_products_keyboard(
     back_callback: str = "admin"
 ) -> types.InlineKeyboardMarkup:
     """Клавиатура управления товарами"""
-    buttons = [
-        [_create_button(cat['name'], f"admin_products_category:{cat['id']}")] 
-        for cat in categories
-    ]
-    buttons.append([_create_button(ButtonType.SEARCH.value, "admin_search_products")])
-    buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, "admin")])
+    buttons = []
+    
+    # Добавляем кнопки категорий
+    for cat in categories:
+        buttons.append([
+            _create_button(cat['name'], f"admin_products_category:{cat['id']}")
+        ])
+    
+    # Добавляем кнопку поиска
+    buttons.append([
+        _create_button(ButtonType.SEARCH.value, "admin_search_products")
+    ])
+    
+    # Добавляем кнопку возврата
+    buttons.append([
+        _create_button(ButtonType.BACK_TO_ADMIN.value, back_callback)
+    ])
+    
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_admin_products_list_keyboard(
     products: List[Dict],
-    category_id: Optional[Union[int, str]] = None,
+    category_id: Union[int, str],
     back_callback: str = "admin_products"
 ) -> types.InlineKeyboardMarkup:
     """Клавиатура списка товаров в категории"""
-    buttons = [
-        [_create_button(prod['name'], f"admin_product_edit:{prod['id']}")] 
-        for prod in products
-    ]
-    if category_id:
-        buttons.append([_create_button(ButtonType.CREATE.value + " товар", f"create_product:{category_id}")])
-    buttons.append([_create_button(ButtonType.BACK_TO_CATEGORIES.value, "admin_products")])
+    buttons = []
+    
+    # Добавляем кнопки товаров
+    for prod in products:
+        buttons.append([
+            _create_button(prod['name'], f"admin_product_edit:{prod['id']}")
+        ])
+    
+    # Добавляем кнопку создания товара
+    buttons.append([
+        _create_button(ButtonType.CREATE.value + " товар", f"create_product:{category_id}")
+    ])
+    
+    # Добавляем кнопку возврата
+    buttons.append([
+        _create_button(ButtonType.BACK_TO_CATEGORIES.value, back_callback)
+    ])
+    
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_admin_tests_keyboard(
