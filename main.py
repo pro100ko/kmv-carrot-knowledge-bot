@@ -348,51 +348,37 @@ async def webhook_handler(request: web.Request) -> web.Response:
         webhook_logger.error(f"Webhook handler error: {e}", exc_info=True)
         return web.Response(status=500)
 
+# Create application instance
+app = web.Application()
+
+# Add startup and shutdown handlers
+app.on_startup.append(on_startup)
+app.on_shutdown.append(on_shutdown)
+
+# Add webhook handler
+app.router.add_post(WEBHOOK_PATH, webhook_handler)
+
+# Add health check endpoint
+async def health_check(request):
+    return web.Response(text="OK")
+app.router.add_get("/health", health_check)
+
 def main() -> None:
     """Main function to run the bot"""
     try:
-        # Create application
-        app = web.Application()
-        
-        # Add startup and shutdown handlers
-        app.on_startup.append(on_startup)
-        app.on_shutdown.append(on_shutdown)
-        
-        # Add webhook handler
-        app.router.add_post(WEBHOOK_PATH, webhook_handler)
-        
-        # Add health check endpoint
-        async def health_check(request):
-            return web.Response(text="OK")
-        app.router.add_get("/health", health_check)
-        
-        # Setup webhook or polling based on environment
         if ENVIRONMENT == "production":
             # Production mode with webhook
             webhook_logger.info(f"Starting in production mode with webhook on port {WEBAPP_PORT}")
             setup_application(app, dp, bot=bot)
             
-            # Create runner with explicit port binding
-            runner = web.AppRunner(app)
-            
-            async def start_server():
-                await runner.setup()
-                site = web.TCPSite(
-                    runner,
-                    host=WEBAPP_HOST,
-                    port=WEBAPP_PORT,
-                    reuse_port=True
-                )
-                await site.start()
-                app_logger.info(f"Server started at http://{WEBAPP_HOST}:{WEBAPP_PORT}")
-                
-                # Keep the server running
-                while True:
-                    await asyncio.sleep(3600)  # Sleep for an hour
-            
-            # Start the server
-            asyncio.run(start_server())
-            
+            # Start webhook server
+            webhook_logger.info(f"Starting webhook server on {WEBAPP_HOST}:{WEBAPP_PORT}")
+            web.run_app(
+                app,
+                host=WEBAPP_HOST,
+                port=WEBAPP_PORT,
+                access_log=webhook_logger
+            )
         else:
             # Development mode with polling
             app_logger.info("Starting in development mode with polling")
@@ -409,6 +395,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+# Export the app instance for Gunicorn
+__all__ = ['app']
 
 @dp.middleware()
 async def timing_middleware(handler: Callable, event: types.Update, data: Dict[str, Any]):
