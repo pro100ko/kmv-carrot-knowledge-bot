@@ -142,7 +142,7 @@ async def register_handlers():
     
     # Register basic commands
     @dp.message(Command("start"))
-async def start_command(message: types.Message):
+    async def start_command(message: types.Message):
         """Handle /start command"""
         try:
             # Register user
