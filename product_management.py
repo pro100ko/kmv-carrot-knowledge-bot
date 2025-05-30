@@ -289,6 +289,10 @@ async def list_products_command(message: Message) -> None:
         )
 
 # Callback handlers
+@router.callback_query(F.data == "product:list")
+async def product_list_handler(callback: CallbackQuery, state: FSMContext) -> None:
+    pass
+
 @router.callback_query(F.data.startswith("product:"))
 async def product_callback(callback: CallbackQuery) -> None:
     """Handle product selection callback"""

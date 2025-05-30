@@ -391,6 +391,10 @@ async def list_tests_command(message: Message) -> None:
         )
 
 # Callback handlers
+@router.callback_query(F.data == "test:list")
+async def test_list_handler(callback: CallbackQuery, state: FSMContext) -> None:
+    pass
+
 @router.callback_query(F.data.startswith("test:"))
 async def test_callback(callback: CallbackQuery) -> None:
     """Handle test selection callback"""

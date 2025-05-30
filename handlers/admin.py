@@ -74,8 +74,8 @@ async def send_admin_menu(
 # ===== ОСНОВНЫЕ ОБРАБОТЧИКИ =====
 @dp.callback_query()
 async def debug_callback_handler(query: types.CallbackQuery):
-    """Debug handler to log all callback queries"""
     logger.info(f"DEBUG: Received callback query: {query.data} from user {query.from_user.id}")
+    await query.answer("Неизвестная команда", show_alert=True)
     return False  # Continue to other handlers
 
 @dp.message(Command("admin"))
@@ -86,25 +86,21 @@ async def admin_handler(update: types.Message | types.CallbackQuery, state: FSMC
         user_id = update.from_user.id
         if not await check_admin_access(user_id, update if isinstance(update, types.CallbackQuery) else None):
             return
-        
         logger.info(f"Admin menu opened by user {user_id}")
         await safe_clear_state(state)
-        
-        # Create keyboard with explicit callback data
+        # Create keyboard with unified callback data
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
             [
-                types.InlineKeyboardButton(text="📂 Категории", callback_data="admin_categories"),
-                types.InlineKeyboardButton(text="🍎 Товары", callback_data="admin_products")
+                types.InlineKeyboardButton(text="📂 Категории", callback_data="category:list"),
+                types.InlineKeyboardButton(text="🍎 Товары", callback_data="product:list")
             ],
             [
-                types.InlineKeyboardButton(text="📝 Тесты", callback_data="admin_tests"),
-                types.InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")
+                types.InlineKeyboardButton(text="📝 Тесты", callback_data="test:list"),
+                types.InlineKeyboardButton(text="📊 Статистика", callback_data="stats:list")
             ],
             [types.InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
         ])
-        
         text = "🔧 <b>Административная панель</b>\n\nВыберите раздел для управления:"
-        
         if isinstance(update, types.CallbackQuery):
             await update.answer()
             await safe_edit_message(
@@ -143,7 +139,7 @@ async def admin_categories_handler(query: types.CallbackQuery, state: FSMContext
             buttons.append([
                 types.InlineKeyboardButton(
                     text=f"✏️ {cat['name']}", 
-                    callback_data=f"admin_category_edit:{cat['id']}"
+                    callback_data=f"category_edit:{cat['id']}"
                 )
             ])
         
@@ -286,7 +282,7 @@ async def admin_products_handler(query: types.CallbackQuery, state: FSMContext) 
             buttons.append([
                 types.InlineKeyboardButton(
                     text=f"📦 {cat['name']}", 
-                    callback_data=f"admin_products_category:{cat['id']}"
+                    callback_data=f"product_category:{cat['id']}"
                 )
             ])
         
@@ -460,7 +456,7 @@ async def admin_tests_handler(query: types.CallbackQuery, state: FSMContext) -> 
             buttons.append([
                 types.InlineKeyboardButton(
                     text=f"✏️ {test['title']}", 
-                    callback_data=f"admin_test_edit:{test['id']}"
+                    callback_data=f"test_edit:{test['id']}"
                 )
             ])
         

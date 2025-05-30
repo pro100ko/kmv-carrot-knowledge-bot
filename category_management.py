@@ -243,6 +243,10 @@ async def list_categories_command(message: Message) -> None:
         )
 
 # Callback handlers
+@router.callback_query(F.data == "category:list")
+async def category_list_handler(callback: CallbackQuery, state: FSMContext) -> None:
+    pass
+
 @router.callback_query(F.data.startswith("category:"))
 async def category_callback(callback: CallbackQuery) -> None:
     """Handle category selection callback"""
