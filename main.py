@@ -363,6 +363,12 @@ async def health_check(request):
     return web.Response(text="OK")
 app.router.add_get("/health", health_check)
 
+# Set port for web server
+if ENVIRONMENT == "production":
+    WEBAPP_PORT = 8443
+else:
+    WEBAPP_PORT = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", "8000")))
+
 def main() -> None:
     """Main function to run the bot"""
     try:
@@ -370,12 +376,7 @@ def main() -> None:
             # Production mode with webhook
             webhook_logger.info(f"Starting in production mode with webhook on port {WEBAPP_PORT}")
             setup_application(app, dp, bot=bot)
-            
-            # Log the port and host for Render debugging
             print(f"Starting web server on {WEBAPP_HOST}:{WEBAPP_PORT}")
-            
-            # Start webhook server
-            webhook_logger.info(f"Starting webhook server on {WEBAPP_HOST}:{WEBAPP_PORT}")
             web.run_app(
                 app,
                 host=WEBAPP_HOST,
@@ -385,13 +386,9 @@ def main() -> None:
         else:
             # Development mode with polling
             app_logger.info("Starting in development mode with polling")
-            
             async def start_polling():
                 await dp.start_polling(bot)
-            
-            # Run polling
             asyncio.run(start_polling())
-            
     except Exception as e:
         app_logger.error(f"Application failed: {e}", exc_info=True)
         raise
