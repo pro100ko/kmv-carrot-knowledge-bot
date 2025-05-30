@@ -30,15 +30,15 @@ def dict_factory(cursor, row):
 
 class DatabaseError(Exception):
     """Base exception for database errors"""
-    pass
+pass
 
 class DatabaseConnectionError(DatabaseError):
     """Raised when database connection fails"""
-    pass
+pass
 
 class DatabaseQueryError(DatabaseError):
     """Raised when a database query fails"""
-    pass
+pass
 
 class Database:
     """Основной класс для работы с базой данных"""
@@ -52,16 +52,17 @@ class Database:
         return cls._instance
     
     def __init__(self):
+        """Initialize database connection"""
         if self._initialized:
             return
-        
-        self.conn = None
+            
         self._initialized = True
+        self.conn = None
         self._connection_attempts = 0
         self._max_connection_attempts = 3
         
         try:
-        self._initialize_db()
+            self._initialize_db()
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
             global SQLITE_AVAILABLE
@@ -1031,21 +1032,21 @@ class Database:
         ''')
         
         # Создаем индексы
-                cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_products_category 
-                ON products(category_id)
-                ''')
+        cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_products_category 
+        ON products(category_id)
+        ''')
         
-                cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_users_telegram 
-                ON users(telegram_id)
-                ''')
+        cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_users_telegram 
+        ON users(telegram_id)
+        ''')
         
-                cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_test_attempts_user 
-                ON test_attempts(user_id)
-                ''')
-                
+        cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_test_attempts_user 
+        ON test_attempts(user_id)
+        ''')
+        
         cursor.execute('''
         CREATE INDEX IF NOT EXISTS idx_test_attempts_test 
         ON test_attempts(test_id)
@@ -1115,7 +1116,7 @@ class Database:
 
     def close(self):
         """Close database connection and cleanup"""
-            with db_lock:
+        with db_lock:
             if self.conn:
                 try:
                     # Create final backup before closing
@@ -1127,7 +1128,7 @@ class Database:
                     # Close connection
                     self.conn.close()
                     logger.info("Database connection closed successfully")
-        except Exception as e:
+                except Exception as e:
                     logger.error(f"Failed to close database connection: {e}")
                 finally:
                     self.conn = None
@@ -1173,9 +1174,9 @@ class Database:
                         continue
             
             return sorted(backups, key=lambda x: x['created_at'], reverse=True)
-    except Exception as e:
+        except Exception as e:
             logger.error(f"Failed to get backup files: {e}")
-        return []
+            return []
 
     def cleanup_old_backups(self, keep_last_n: int = 5) -> bool:
         """Remove old backup files keeping only the last N backups"""
