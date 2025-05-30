@@ -364,10 +364,7 @@ async def health_check(request):
 app.router.add_get("/health", health_check)
 
 # Set port for web server
-if ENVIRONMENT == "production":
-    WEBAPP_PORT = 8443
-else:
-    WEBAPP_PORT = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", "8000")))
+WEBAPP_PORT = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", "8000")))
 
 def main() -> None:
     """Main function to run the bot"""
