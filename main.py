@@ -5,6 +5,8 @@ import time
 import asyncio
 from typing import Optional, Callable, Dict, Any
 
+print("main.py started")
+
 # Add project root to Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
