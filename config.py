@@ -27,8 +27,8 @@ WEBHOOK_URL = f"https://{WEBHOOK_HOST}{WEBHOOK_PATH}" if WEBHOOK_HOST else None 
 # SSL certificate handling
 WEBHOOK_SSL_CERT = os.getenv("WEBHOOK_SSL_CERT")  # Optional in production as Render handles SSL
 WEBAPP_HOST = os.getenv("WEBAPP_HOST", "0.0.0.0")
-# Use Render's PORT environment variable, fallback to 8000 for development
-WEBAPP_PORT = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", "8000")))
+# Use Render's PORT environment variable, fallback to 8000 for development, and handle empty strings robustly
+WEBAPP_PORT = int(os.getenv("PORT") or os.getenv("WEBAPP_PORT") or "8000")
 
 # Admin settings
 ADMIN_IDS: List[int] = [
