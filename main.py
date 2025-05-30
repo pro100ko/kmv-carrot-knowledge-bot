@@ -373,7 +373,7 @@ def main() -> None:
             # Production mode with webhook
             webhook_logger.info(f"Starting in production mode with webhook on port {WEBAPP_PORT}")
             setup_application(app, dp, bot=bot)
-            print(f"Starting web server on {WEBAPP_HOST}:{WEBAPP_PORT}")
+            print(f"Trying to bind to {WEBAPP_HOST}:{WEBAPP_PORT}")
             web.run_app(
                 app,
                 host=WEBAPP_HOST,
