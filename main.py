@@ -5,6 +5,7 @@ import asyncio
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -38,12 +39,18 @@ async def start_handler(message: types.Message):
     print(f"[HANDLER] /start from {message.from_user.id}")
     await message.answer("Hello! The bot is running via webhook.")
 
+# Create a keyboard with a /start button
+start_keyboard = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="/start")]],
+    resize_keyboard=True
+)
+
 # Catch-all handler for all messages
 @dp.message()
 async def catch_all_handler(message: types.Message):
     print(f"[CATCH-ALL] Received message: {message}")
     print(f"[CATCH-ALL] message.text: {message.text}")
-    await message.answer(f"Echo: {message.text}")
+    await message.answer(f"Echo: {message.text}", reply_markup=start_keyboard)
 
 # Create aiohttp app
 app = web.Application()
