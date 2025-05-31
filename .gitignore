@@ -81,3 +81,9 @@ morkovka-kmv-bot-31365aded116.json
 *.njsproj
 *.sln
 *.sw?
+
+# Ignore webhook secrets
+webhook_secret.txt
+webhook.env
+*webhook*
+.env
