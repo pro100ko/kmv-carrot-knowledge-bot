@@ -5,7 +5,7 @@ import asyncio
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -42,8 +42,14 @@ async def start_handler(message: types.Message):
 # Create a keyboard with a /start button
 start_keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="/start")]],
-    resize_keyboard=True
+    resize_keyboard=True,
+    one_time_keyboard=False
 )
+
+# Handler to remove the keyboard
+@dp.message(Command("remove_keyboard"))
+async def remove_keyboard_handler(message: types.Message):
+    await message.answer("Keyboard removed.", reply_markup=ReplyKeyboardRemove())
 
 # Catch-all handler for all messages
 @dp.message()
