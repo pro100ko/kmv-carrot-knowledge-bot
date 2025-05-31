@@ -56,7 +56,13 @@ async def remove_keyboard_handler(message: types.Message):
 async def catch_all_handler(message: types.Message):
     print(f"[CATCH-ALL] Received message: {message}")
     print(f"[CATCH-ALL] message.text: {message.text}")
-    await message.answer(f"Echo: {message.text}", reply_markup=start_keyboard)
+    if message.text == "/start":
+        await message.answer("Hello! The bot is running via webhook.", reply_markup=start_keyboard)
+    elif message.text == "/remove_keyboard":
+        await message.answer("Keyboard removed.", reply_markup=ReplyKeyboardRemove())
+    else:
+        # Add more button text logic here if needed
+        await message.answer(f"Echo: {message.text}", reply_markup=start_keyboard)
 
 # Create aiohttp app
 app = web.Application()
