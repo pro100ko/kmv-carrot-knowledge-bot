@@ -32,11 +32,18 @@ print(f"[BOOT] Using PORT={PORT}, WEBHOOK_URL={WEBHOOK_URL}")
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Register /start handler
+# Register /start handler for all text messages
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     print(f"[HANDLER] /start from {message.from_user.id}")
     await message.answer("Hello! The bot is running via webhook.")
+
+# Catch-all handler for all messages
+@dp.message()
+async def catch_all_handler(message: types.Message):
+    print(f"[CATCH-ALL] Received message: {message}")
+    # Optionally, reply to show the bot is alive
+    # await message.answer("Message received (debug)")
 
 # Create aiohttp app
 app = web.Application()
@@ -58,6 +65,7 @@ async def webhook_handler(request):
     print("[HTTP] /webhook POST received")
     try:
         update = types.Update.model_validate(await request.json())
+        print(f"[UPDATE] {update}")
         await dp.feed_update(bot, update)
     except Exception as e:
         print(f"[ERROR] Webhook handler: {e}")
