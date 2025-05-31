@@ -42,8 +42,8 @@ async def start_handler(message: types.Message):
 @dp.message()
 async def catch_all_handler(message: types.Message):
     print(f"[CATCH-ALL] Received message: {message}")
-    # Optionally, reply to show the bot is alive
-    # await message.answer("Message received (debug)")
+    print(f"[CATCH-ALL] message.text: {message.text}")
+    await message.answer(f"Echo: {message.text}")
 
 # Create aiohttp app
 app = web.Application()
