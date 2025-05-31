@@ -270,15 +270,38 @@ setup_application(app, dp, bot=bot)
 def main() -> None:
     """Main function to run the bot"""
     try:
-        logger.info(f"Starting web server on port {PORT}")
+        # Get host and port
+        host = "0.0.0.0"  # Bind to all interfaces
+        logger.info(f"Starting web server on {host}:{PORT}")
         
-        # Run the application
-        web.run_app(
-            app,
-            host=WEBAPP_HOST,
-            port=PORT,  # Use the port we got at startup
-            access_log=logger
-        )
+        # Create runner
+        runner = web.AppRunner(app)
+        
+        async def start_server():
+            """Start the server and wait for it to be ready"""
+            try:
+                await runner.setup()
+                site = web.TCPSite(runner, host, PORT)
+                await site.start()
+                logger.info(f"Server started successfully on {host}:{PORT}")
+                
+                # Keep the server running
+                while True:
+                    await asyncio.sleep(3600)  # Sleep for an hour
+            except Exception as e:
+                logger.error(f"Server startup failed: {e}", exc_info=True)
+                raise
+        
+        # Run the server
+        loop = asyncio.get_event_loop()
+        try:
+            loop.run_until_complete(start_server())
+        except KeyboardInterrupt:
+            logger.info("Shutting down...")
+        finally:
+            loop.run_until_complete(runner.cleanup())
+            loop.close()
+            
     except Exception as e:
         logger.error(f"Application failed: {e}", exc_info=True)
         raise
