@@ -15,12 +15,18 @@ print("[BOOT] main.py started")
 # Get environment variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", "8000"))
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
 
 if not BOT_TOKEN:
     print("[ERROR] BOT_TOKEN is not set!")
     sys.exit(1)
+if not RENDER_EXTERNAL_URL:
+    print("[ERROR] RENDER_EXTERNAL_URL is not set! Set it to your Render public URL (without trailing slash)")
+    sys.exit(1)
 
-print(f"[BOOT] Using PORT={PORT}")
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_URL = f"{RENDER_EXTERNAL_URL}{WEBHOOK_PATH}"
+print(f"[BOOT] Using PORT={PORT}, WEBHOOK_URL={WEBHOOK_URL}")
 
 # Create bot and dispatcher
 bot = Bot(token=BOT_TOKEN)
@@ -30,7 +36,7 @@ dp = Dispatcher()
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     print(f"[HANDLER] /start from {message.from_user.id}")
-    await message.answer("Hello! The bot is running.")
+    await message.answer("Hello! The bot is running via webhook.")
 
 # Create aiohttp app
 app = web.Application()
@@ -47,22 +53,28 @@ async def root(request):
     return web.Response(text="Bot server is running")
 app.router.add_get("/", root)
 
-# Webhook handler (not used, but required for aiogram+aiohttp)
+# Webhook handler
 async def webhook_handler(request):
-    print("[HTTP] /webhook requested")
-    return web.Response(text="Webhook not configured.")
-app.router.add_post("/webhook", webhook_handler)
+    print("[HTTP] /webhook POST received")
+    try:
+        update = types.Update.model_validate(await request.json())
+        await dp.feed_update(bot, update)
+    except Exception as e:
+        print(f"[ERROR] Webhook handler: {e}")
+    return web.Response(text="OK")
+app.router.add_post(WEBHOOK_PATH, webhook_handler)
 
 # Startup
 async def on_startup(app):
-    print("[STARTUP] App startup")
-    # Start polling in background
-    asyncio.create_task(dp.start_polling(bot))
+    print("[STARTUP] App startup - setting webhook...")
+    await bot.set_webhook(WEBHOOK_URL)
+    print(f"[STARTUP] Webhook set to {WEBHOOK_URL}")
 app.on_startup.append(on_startup)
 
 # Shutdown
 async def on_shutdown(app):
-    print("[SHUTDOWN] App shutdown")
+    print("[SHUTDOWN] App shutdown - deleting webhook and closing bot session...")
+    await bot.delete_webhook()
     await bot.session.close()
 app.on_shutdown.append(on_shutdown)
 
