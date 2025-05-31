@@ -11,7 +11,10 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-logger.info("Starting bot application")
+
+# Get port from environment immediately
+PORT = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", "8000")))
+logger.info(f"Configured to use port {PORT}")
 
 # Add project root to Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -36,7 +39,6 @@ from config import (
     WEBHOOK_HOST,
     WEBHOOK_SSL_CERT,
     WEBAPP_HOST,
-    WEBAPP_PORT,
     ADMIN_IDS
 )
 from dispatcher import dp
@@ -159,6 +161,14 @@ async def health_check(request):
 
 app.router.add_get("/health", health_check)
 
+# Add root endpoint for Render health checks
+async def root(request):
+    """Root endpoint for Render health checks"""
+    logger.info("Root endpoint requested")
+    return web.Response(text="Bot server is running")
+
+app.router.add_get("/", root)
+
 # Add webhook handler
 async def webhook_handler(request: web.Request) -> web.Response:
     """Handle incoming webhook requests"""
@@ -260,15 +270,13 @@ setup_application(app, dp, bot=bot)
 def main() -> None:
     """Main function to run the bot"""
     try:
-        # Get port from environment
-        port = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", "8000")))
-        logger.info(f"Starting server on port {port}")
+        logger.info(f"Starting web server on port {PORT}")
         
         # Run the application
         web.run_app(
             app,
             host=WEBAPP_HOST,
-            port=port,
+            port=PORT,  # Use the port we got at startup
             access_log=logger
         )
     except Exception as e:
@@ -276,4 +284,5 @@ def main() -> None:
         raise
 
 if __name__ == "__main__":
+    logger.info("Starting bot application")
     main()
