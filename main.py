@@ -15,7 +15,7 @@ from config import (
     BOT_TOKEN,
     WEBHOOK_HOST,
     WEBHOOK_PATH,
-    WEBHOOK_PORT,
+    WEBAPP_PORT,
     WEBHOOK_SSL_CERT,
     WEBHOOK_SSL_PRIV,
     ENABLE_WEBHOOK,
@@ -100,13 +100,13 @@ async def on_startup() -> None:
         await web._run_app(
             app,
             host=WEBHOOK_HOST,
-            port=WEBHOOK_PORT,
+            port=WEBAPP_PORT,
             ssl_context={
                 'cert': WEBHOOK_SSL_CERT,
                 'key': WEBHOOK_SSL_PRIV
             } if WEBHOOK_SSL_CERT and WEBHOOK_SSL_PRIV else None
         )
-        logger.info(f"Webhook server started at {WEBHOOK_HOST}:{WEBHOOK_PORT}")
+        logger.info(f"Webhook server started at {WEBHOOK_HOST}:{WEBAPP_PORT}")
     else:
         # Start polling
         await dp.start_polling(bot)
