@@ -2,9 +2,10 @@
 
 import asyncio
 import logging
-from typing import Optional, AsyncGenerator
+from typing import Optional, AsyncGenerator, Callable, Any
 import aiosqlite
 from contextlib import asynccontextmanager
+from functools import wraps
 
 from config import (
     DB_FILE,
@@ -13,6 +14,36 @@ from config import (
 )
 
 logger = logging.getLogger(__name__)
+
+def with_connection(func: Callable) -> Callable:
+    """Decorator for managing database connections.
+    
+    This decorator ensures that database operations have access to a connection
+    from the pool and handles connection cleanup.
+    
+    Args:
+        func: The async function to decorate
+        
+    Returns:
+        Decorated function that manages its own database connection
+    """
+    @wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        if not hasattr(self, '_pool'):
+            raise RuntimeError("Database instance not properly initialized")
+            
+        async with self._pool.acquire() as conn:
+            # If the function expects a connection as first argument after self,
+            # pass it. Otherwise, call the function directly.
+            if 'conn' in kwargs:
+                return await func(self, *args, **kwargs)
+            else:
+                # Insert connection as second argument (after self)
+                args_list = list(args)
+                args_list.insert(0, conn)
+                return await func(self, *args_list, **kwargs)
+                
+    return wrapper
 
 class DatabasePool:
     """Manages a pool of database connections."""
