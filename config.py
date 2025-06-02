@@ -66,6 +66,7 @@ WEBHOOK_URL: Optional[str] = f"https://{WEBHOOK_HOST}{WEBHOOK_PATH}" if WEBHOOK_
 
 # SSL certificate handling
 WEBHOOK_SSL_CERT = os.getenv("WEBHOOK_SSL_CERT")  # Optional in production as Render handles SSL
+WEBHOOK_SSL_PRIV = os.getenv("WEBHOOK_SSL_PRIV")  # Optional in production as Render handles SSL
 WEBAPP_HOST: str = os.getenv("WEBAPP_HOST", "0.0.0.0")
 # Use Render's PORT environment variable, fallback to 8000 for development, and handle empty strings robustly
 WEBAPP_PORT: int = int(os.getenv("PORT") or os.getenv("WEBAPP_PORT") or "8000")
