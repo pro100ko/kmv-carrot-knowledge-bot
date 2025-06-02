@@ -182,8 +182,8 @@ def validate_config() -> None:
     if DEFAULT_TEST_PASSING_SCORE < 0 or DEFAULT_TEST_PASSING_SCORE > 100:
         raise ValueError("DEFAULT_TEST_PASSING_SCORE must be between 0 and 100")
     
-    if DEFAULT_TEST_TIME_LIMIT < 1:
-        raise ValueError("DEFAULT_TEST_TIME_LIMIT must be at least 1")
+    if DEFAULT_TEST_TIME_LIMIT < 0:
+        raise ValueError("DEFAULT_TEST_TIME_LIMIT must be at least 0 (0 means no time limit)")
     
     if MIN_QUESTIONS_PER_TEST < 1:
         raise ValueError("MIN_QUESTIONS_PER_TEST must be at least 1")
