@@ -143,6 +143,7 @@ ENABLE_USER_ACTIVITY_TRACKING = os.getenv("ENABLE_USER_ACTIVITY_TRACKING", "true
 ENABLE_ADMIN_PANEL: bool = bool(ADMIN_IDS)
 ENABLE_TEST_SYSTEM = os.getenv("ENABLE_TEST_SYSTEM", "true").lower() == "true"
 ENABLE_PRODUCT_CATALOG = os.getenv("ENABLE_PRODUCT_CATALOG", "true").lower() == "true"
+ENABLE_WEBHOOK = os.getenv("ENABLE_WEBHOOK", str(IS_PRODUCTION)).lower() == "true"  # Enable webhook in production by default
 
 # Session settings
 SESSION_TIMEOUT_MINUTES: int = int(os.getenv("SESSION_TIMEOUT_MINUTES", "30"))
@@ -164,12 +165,17 @@ def validate_config() -> None:
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN is required")
     
-    if IS_PRODUCTION:
-        if not WEBHOOK_HOST:
-            raise ValueError(
-                "WEBHOOK_HOST or RENDER_EXTERNAL_URL is required in production mode. "
-                "Please ensure the environment variable is set in your Render dashboard."
-            )
+    if IS_PRODUCTION and not ENABLE_WEBHOOK:
+        raise ValueError(
+            "Webhook mode must be enabled in production. "
+            "Set ENABLE_WEBHOOK=true in your environment variables."
+        )
+    
+    if ENABLE_WEBHOOK and not WEBHOOK_HOST:
+        raise ValueError(
+            "WEBHOOK_HOST or RENDER_EXTERNAL_URL is required when webhook mode is enabled. "
+            "Please ensure the environment variable is set in your Render dashboard."
+        )
     
     if not ADMIN_IDS:
         raise ValueError("At least one ADMIN_ID is required")
