@@ -45,6 +45,9 @@ logger = logging.getLogger(__name__)
 bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 
+# Create web application
+app = web.Application()
+
 # Store webhook handler for cleanup
 webhook_handler: Optional[SimpleRequestHandler] = None
 
@@ -92,21 +95,9 @@ async def on_startup() -> None:
             handle_signals=False
         )
         
-        app = web.Application()
         webhook_handler.register(app, path=WEBHOOK_PATH)
         setup_application(app, dp, bot=bot)
-        
-        # Start webhook server
-        await web._run_app(
-            app,
-            host=WEBHOOK_HOST,
-            port=WEBAPP_PORT,
-            ssl_context={
-                'cert': WEBHOOK_SSL_CERT,
-                'key': WEBHOOK_SSL_PRIV
-            } if WEBHOOK_SSL_CERT and WEBHOOK_SSL_PRIV else None
-        )
-        logger.info(f"Webhook server started at {WEBHOOK_HOST}:{WEBAPP_PORT}")
+        logger.info(f"Webhook server configured at {WEBHOOK_HOST}{WEBHOOK_PATH}")
     else:
         # Start polling
         await dp.start_polling(bot)
@@ -159,30 +150,32 @@ def handle_exception(loop: asyncio.AbstractEventLoop, context: dict) -> None:
     if ENABLE_METRICS:
         metrics_collector.increment_error_count("uncaught_exception")
 
-def main() -> None:
-    """Main application entry point."""
-    try:
-        # Setup signal handlers
-        loop = asyncio.get_event_loop()
-        loop.set_exception_handler(handle_exception)
-        
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(
-                sig,
-                lambda: asyncio.create_task(on_shutdown())
-            )
-        
-        # Create web application for health check
-        app = web.Application()
-        app.router.add_get("/health", health_check)
-        
-        # Start application
-        loop.run_until_complete(on_startup())
-        loop.run_forever()
-        
-    except Exception as e:
-        logger.error(f"Application failed to start: {e}", exc_info=True)
-        sys.exit(1)
+# Add health check endpoint
+app.router.add_get("/health", health_check)
+
+# Setup startup and shutdown handlers
+app.on_startup.append(on_startup)
+app.on_shutdown.append(on_shutdown)
+
+# Setup exception handler
+loop = asyncio.get_event_loop()
+loop.set_exception_handler(handle_exception)
+
+# Add signal handlers
+for sig in (signal.SIGTERM, signal.SIGINT):
+    loop.add_signal_handler(
+        sig,
+        lambda: asyncio.create_task(on_shutdown())
+    )
 
 if __name__ == "__main__":
-    main()
+    # Start the application
+    web.run_app(
+        app,
+        host="0.0.0.0",
+        port=WEBAPP_PORT,
+        ssl_context={
+            'cert': WEBHOOK_SSL_CERT,
+            'key': WEBHOOK_SSL_PRIV
+        } if WEBHOOK_SSL_CERT and WEBHOOK_SSL_PRIV else None
+    )
