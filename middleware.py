@@ -1,73 +1,190 @@
 import time
 import functools
-from typing import Callable, Dict, Any, Optional, Union
-from datetime import datetime
+from typing import Callable, Dict, Any, Optional, Union, Awaitable
+from datetime import datetime, timedelta
+from collections import defaultdict
+import logging
 
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, Message, CallbackQuery, Update
 from aiogram.dispatcher.flags import get_flag
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 
 from logging_config import app_logger, user_logger, admin_logger
 from sqlite_db import db
+from config import (
+    RATE_LIMIT_MESSAGES,
+    RATE_LIMIT_CALLBACKS,
+    RATE_LIMIT_WINDOW,
+    ENABLE_METRICS
+)
+from monitoring.metrics import metrics_collector
+from utils.error_handling import handle_errors, log_operation, validate_state
 
-class ErrorHandlingMiddleware(BaseMiddleware):
-    """Middleware for handling errors in handlers"""
+logger = logging.getLogger(__name__)
+
+class MetricsMiddleware(BaseMiddleware):
+    """Middleware for collecting metrics."""
     
     async def __call__(
         self,
-        handler: Callable,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
+        """Process event and collect metrics."""
+        start_time = time.time()
+        
+        try:
+            # Record event type
+            if isinstance(event, Message):
+                metrics_collector.increment_message_count()
+                handler_name = "message_handler"
+            elif isinstance(event, CallbackQuery):
+                metrics_collector.increment_callback_count()
+                handler_name = "callback_handler"
+            else:
+                handler_name = "unknown_handler"
+            
+            # Process event
+            result = await handler(event, data)
+            
+            # Record success metrics
+            duration = time.time() - start_time
+            metrics_collector.record_handler_operation(
+                handler=handler_name,
+                operation=handler.__name__,
+                duration=duration
+            )
+            metrics_collector.record_request_time(duration)
+            
+            return result
+            
+        except Exception as e:
+            # Record error metrics
+            duration = time.time() - start_time
+            metrics_collector.increment_error_count(str(type(e).__name__))
+            metrics_collector.record_handler_operation(
+                handler=handler_name,
+                operation=handler.__name__,
+                duration=duration,
+                error=str(e)
+            )
+            raise
+
+class ErrorHandlingMiddleware(BaseMiddleware):
+    """Middleware for handling errors."""
+    
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        """Process event with error handling."""
         try:
             return await handler(event, data)
-        except TelegramAPIError as e:
-            # Handle Telegram API errors
-            error_msg = f"Telegram API error: {e}"
-            app_logger.error(error_msg)
-            
-            # Try to notify user if possible
-            if isinstance(event, (Message, CallbackQuery)):
-                user_id = event.from_user.id
-                try:
-                    if isinstance(event, Message):
-                        await event.answer(
-                            "Произошла ошибка при обработке запроса. "
-                            "Пожалуйста, попробуйте позже."
-                        )
-                    else:  # CallbackQuery
-                        await event.answer(
-                            "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
-                            show_alert=True
-                        )
-                except Exception as notify_error:
-                    app_logger.error(f"Failed to notify user {user_id}: {notify_error}")
-            
-            return None
         except Exception as e:
-            # Handle all other errors
-            error_msg = f"Unexpected error in handler: {e}"
-            app_logger.error(error_msg, exc_info=True)
+            logger.error(f"Error in handler {handler.__name__}: {e}", exc_info=True)
+            metrics_collector.increment_error_count(str(type(e).__name__))
             
-            # Try to notify user if possible
-            if isinstance(event, (Message, CallbackQuery)):
-                user_id = event.from_user.id
-                try:
-                    if isinstance(event, Message):
-                        await event.answer(
-                            "Произошла непредвиденная ошибка. "
-                            "Администратор уже уведомлен."
-                        )
-                    else:  # CallbackQuery
-                        await event.answer(
-                            "Произошла ошибка. Администратор уведомлен.",
-                            show_alert=True
-                        )
-                except Exception as notify_error:
-                    app_logger.error(f"Failed to notify user {user_id}: {notify_error}")
+            # Try to send error message to user
+            try:
+                if isinstance(event, Message):
+                    await event.answer(
+                        "Произошла ошибка при обработке запроса. "
+                        "Пожалуйста, попробуйте позже или обратитесь к администратору."
+                    )
+                elif isinstance(event, CallbackQuery):
+                    await event.answer(
+                        "Произошла ошибка. Попробуйте еще раз.",
+                        show_alert=True
+                    )
+            except Exception as send_error:
+                logger.error(f"Error sending error message: {send_error}")
             
-            return None
+            raise
+
+class StateManagementMiddleware(BaseMiddleware):
+    """Middleware for managing user state."""
+    
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        """Process event with state management."""
+        start_time = time.time()
+        
+        try:
+            # Get user state
+            state = data.get("state")
+            if state:
+                # Record state operation
+                metrics_collector.record_operation(
+                    operation="state_management",
+                    duration=time.time() - start_time
+                )
+            
+            return await handler(event, data)
+            
+        except Exception as e:
+            # Record state error
+            duration = time.time() - start_time
+            metrics_collector.record_operation(
+                operation="state_management",
+                duration=duration,
+                error=str(e)
+            )
+            raise
+
+class LoggingMiddleware(BaseMiddleware):
+    """Middleware for logging."""
+    
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        """Process event with logging."""
+        start_time = time.time()
+        
+        try:
+            # Log event
+            if isinstance(event, Message):
+                logger.info(
+                    f"Processing message from user {event.from_user.id}: "
+                    f"{event.text or '[non-text message]'}"
+                )
+            elif isinstance(event, CallbackQuery):
+                logger.info(
+                    f"Processing callback from user {event.from_user.id}: "
+                    f"{event.data}"
+                )
+            
+            # Process event
+            result = await handler(event, data)
+            
+            # Record logging operation
+            duration = time.time() - start_time
+            metrics_collector.record_operation(
+                operation="logging",
+                duration=duration
+            )
+            
+            return result
+            
+        except Exception as e:
+            # Record logging error
+            duration = time.time() - start_time
+            metrics_collector.record_operation(
+                operation="logging",
+                duration=duration,
+                error=str(e)
+            )
+            raise
 
 class TimingMiddleware(BaseMiddleware):
     """Middleware for measuring handler execution time"""
@@ -105,48 +222,6 @@ class TimingMiddleware(BaseMiddleware):
                     f"Handler: {handler_name}{user_info} "
                     f"took {execution_time:.2f} seconds"
                 )
-
-class StateManagementMiddleware(BaseMiddleware):
-    """Middleware for managing user state"""
-    
-    async def __call__(
-        self,
-        handler: Callable,
-        event: TelegramObject,
-        data: Dict[str, Any]
-    ) -> Any:
-        if not isinstance(event, (Message, CallbackQuery)):
-            return await handler(event, data)
-        
-        user_id = event.from_user.id
-        
-        try:
-            # Get current state
-            state_data = db.get_user_state(user_id)
-            current_state = state_data.get('state') if state_data else None
-            
-            # Update state data if needed
-            if current_state:
-                # Get state data from handler if available
-                state_data = get_flag(data, "state_data")
-                if state_data:
-                    db.update_user_state(user_id, current_state, str(state_data))
-            
-            # Call handler
-            result = await handler(event, data)
-            
-            # Update last active timestamp
-            db.register_user({
-                'telegram_id': user_id,
-                'first_name': event.from_user.first_name,
-                'last_name': event.from_user.last_name,
-                'username': event.from_user.username
-            })
-            
-            return result
-        except Exception as e:
-            app_logger.error(f"State management error for user {user_id}: {e}")
-            return await handler(event, data)
 
 class AdminAccessMiddleware(BaseMiddleware):
     """Middleware for checking admin access"""
@@ -245,6 +320,79 @@ class UserActivityMiddleware(BaseMiddleware):
             user_logger.error(f"User activity tracking error for user {user_id}: {e}")
             return await handler(event, data)
 
+class RateLimitMiddleware(BaseMiddleware):
+    """Middleware to handle rate limiting"""
+    
+    def __init__(self):
+        """Initialize rate limiter"""
+        super().__init__()
+        self._message_limits: Dict[int, list] = defaultdict(list)  # user_id -> timestamps
+        self._callback_limits: Dict[int, list] = defaultdict(list)  # user_id -> timestamps
+    
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Any],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        """Process update with rate limiting"""
+        # Get user ID
+        user_id = None
+        if isinstance(event, Message):
+            user_id = event.from_user.id
+            limits = self._message_limits
+            max_requests = RATE_LIMIT_MESSAGES
+        elif isinstance(event, CallbackQuery):
+            user_id = event.from_user.id
+            limits = self._callback_limits
+            max_requests = RATE_LIMIT_CALLBACKS
+        else:
+            return await handler(event, data)
+        
+        if not user_id:
+            return await handler(event, data)
+        
+        # Check rate limit
+        now = time.time()
+        window_start = now - RATE_LIMIT_WINDOW
+        
+        # Clean up old timestamps
+        limits[user_id] = [ts for ts in limits[user_id] if ts > window_start]
+        
+        # Check if limit exceeded
+        if len(limits[user_id]) >= max_requests:
+            if ENABLE_METRICS:
+                metrics_collector.record_error("rate_limit")
+            
+            if isinstance(event, Message):
+                try:
+                    await event.answer(
+                        "Слишком много сообщений. Пожалуйста, подождите немного."
+                    )
+                except TelegramBadRequest as e:
+                    app_logger.warning(f"Could not send rate limit message: {e}")
+            elif isinstance(event, CallbackQuery):
+                try:
+                    await event.answer(
+                        "Слишком много запросов. Пожалуйста, подождите немного.",
+                        show_alert=True
+                    )
+                except TelegramBadRequest as e:
+                    app_logger.warning(f"Could not send rate limit callback: {e}")
+            
+            return
+        
+        # Record request
+        limits[user_id].append(now)
+        
+        # Process update
+        try:
+            return await handler(event, data)
+        except Exception as e:
+            if ENABLE_METRICS:
+                metrics_collector.record_error("other")
+            raise
+
 def register_middlewares(dispatcher):
     """Register all middlewares with the dispatcher"""
     dispatcher.update.middleware(ErrorHandlingMiddleware())
@@ -252,5 +400,13 @@ def register_middlewares(dispatcher):
     dispatcher.update.middleware(StateManagementMiddleware())
     dispatcher.update.middleware(AdminAccessMiddleware())
     dispatcher.update.middleware(UserActivityMiddleware())
+    dispatcher.update.middleware(RateLimitMiddleware())
+    dispatcher.update.middleware(LoggingMiddleware())
     
-    app_logger.info("All middlewares registered successfully") 
+    app_logger.info("All middlewares registered successfully")
+
+# Create middleware instances
+metrics_middleware = MetricsMiddleware()
+error_handling_middleware = ErrorHandlingMiddleware()
+state_management_middleware = StateManagementMiddleware()
+logging_middleware = LoggingMiddleware() 

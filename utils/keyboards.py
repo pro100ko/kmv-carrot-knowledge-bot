@@ -1,6 +1,7 @@
 from aiogram import types
 from typing import List, Dict, Optional, Union
 from enum import Enum
+from config import ADMIN_IDS
 
 class ButtonType(Enum):
     """Типы кнопок для унификации"""
@@ -43,6 +44,269 @@ def _add_navigation_buttons(
     if nav_buttons:
         buttons.append(nav_buttons)
     buttons.append([_create_button(ButtonType.BACK.value, back_data)])
+
+def get_main_menu_keyboard() -> types.ReplyKeyboardMarkup:
+    """Get main menu keyboard for regular users."""
+    return types.ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                types.KeyboardButton(text="📚 Каталог"),
+                types.KeyboardButton(text="🔍 Поиск")
+            ],
+            [
+                types.KeyboardButton(text="📝 Тесты"),
+                types.KeyboardButton(text="❓ Помощь")
+            ],
+            [
+                types.KeyboardButton(text="👤 Профиль"),
+                types.KeyboardButton(text="🚪 Выход")
+            ]
+        ],
+        resize_keyboard=True
+    )
+
+def get_admin_menu_keyboard() -> types.ReplyKeyboardMarkup:
+    """Get main menu keyboard for administrators."""
+    return types.ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                types.KeyboardButton(text="📚 Каталог"),
+                types.KeyboardButton(text="🔍 Поиск")
+            ],
+            [
+                types.KeyboardButton(text="📝 Тесты"),
+                types.KeyboardButton(text="📊 Статистика")
+            ],
+            [
+                types.KeyboardButton(text="⚙️ Управление"),
+                types.KeyboardButton(text="👤 Профиль")
+            ],
+            [
+                types.KeyboardButton(text="🚪 Выход")
+            ]
+        ],
+        resize_keyboard=True
+    )
+
+def get_confirm_keyboard(action: str = None) -> types.InlineKeyboardMarkup:
+    """Get confirmation keyboard for actions."""
+    keyboard = [
+        [
+            types.InlineKeyboardButton(
+                text="✅ Подтвердить",
+                callback_data="confirm_action"
+            ),
+            types.InlineKeyboardButton(
+                text="❌ Отмена",
+                callback_data="cancel_action"
+            )
+        ]
+    ]
+    return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_back_keyboard() -> types.InlineKeyboardMarkup:
+    """Get back button keyboard."""
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="◀️ Назад",
+                    callback_data="back_to_main"
+                )
+            ]
+        ]
+    )
+
+def get_catalog_keyboard(categories: list) -> types.InlineKeyboardMarkup:
+    """Get catalog navigation keyboard."""
+    keyboard = []
+    for category in categories:
+        keyboard.append([
+            types.InlineKeyboardButton(
+                text=category["name"],
+                callback_data=f"category_{category['id']}"
+            )
+        ])
+    
+    # Add back button
+    keyboard.append([
+        types.InlineKeyboardButton(
+            text="◀️ Назад",
+            callback_data="back_to_main"
+        )
+    ])
+    
+    return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_product_keyboard(
+    product_id: int,
+    is_admin: bool = False
+) -> types.InlineKeyboardMarkup:
+    """Get product view keyboard."""
+    keyboard = []
+    
+    # Add test button if product has tests
+    keyboard.append([
+        types.InlineKeyboardButton(
+            text="📝 Пройти тест",
+            callback_data=f"test_product_{product_id}"
+        )
+    ])
+    
+    # Add admin controls
+    if is_admin:
+        keyboard.extend([
+            [
+                types.InlineKeyboardButton(
+                    text="✏️ Редактировать",
+                    callback_data=f"edit_product_{product_id}"
+                ),
+                types.InlineKeyboardButton(
+                    text="❌ Удалить",
+                    callback_data=f"delete_product_{product_id}"
+                )
+            ]
+        ])
+    
+    # Add back button
+    keyboard.append([
+        types.InlineKeyboardButton(
+            text="◀️ Назад",
+            callback_data="back_to_catalog"
+        )
+    ])
+    
+    return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_test_keyboard(
+    test_id: int,
+    is_admin: bool = False
+) -> types.InlineKeyboardMarkup:
+    """Get test view keyboard."""
+    keyboard = []
+    
+    # Add start test button
+    keyboard.append([
+        types.InlineKeyboardButton(
+            text="▶️ Начать тест",
+            callback_data=f"start_test_{test_id}"
+        )
+    ])
+    
+    # Add admin controls
+    if is_admin:
+        keyboard.extend([
+            [
+                types.InlineKeyboardButton(
+                    text="✏️ Редактировать",
+                    callback_data=f"edit_test_{test_id}"
+                ),
+                types.InlineKeyboardButton(
+                    text="📊 Результаты",
+                    callback_data=f"test_results_{test_id}"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="❌ Удалить",
+                    callback_data=f"delete_test_{test_id}"
+                )
+            ]
+        ])
+    
+    # Add back button
+    keyboard.append([
+        types.InlineKeyboardButton(
+            text="◀️ Назад",
+            callback_data="back_to_tests"
+        )
+    ])
+    
+    return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_admin_control_keyboard() -> types.InlineKeyboardMarkup:
+    """Get admin control panel keyboard."""
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="👥 Пользователи",
+                    callback_data="admin_users"
+                ),
+                types.InlineKeyboardButton(
+                    text="📚 Каталог",
+                    callback_data="admin_catalog"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="📝 Тесты",
+                    callback_data="admin_tests"
+                ),
+                types.InlineKeyboardButton(
+                    text="📊 Статистика",
+                    callback_data="admin_stats"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="⚙️ Настройки",
+                    callback_data="admin_settings"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="◀️ Назад",
+                    callback_data="back_to_main"
+                )
+            ]
+        ]
+    )
+
+def get_pagination_keyboard(
+    current_page: int,
+    total_pages: int,
+    prefix: str
+) -> types.InlineKeyboardMarkup:
+    """Get pagination keyboard."""
+    keyboard = []
+    
+    # Add page navigation
+    nav_buttons = []
+    if current_page > 1:
+        nav_buttons.append(
+            types.InlineKeyboardButton(
+                text="◀️",
+                callback_data=f"{prefix}_page_{current_page - 1}"
+            )
+        )
+    
+    nav_buttons.append(
+        types.InlineKeyboardButton(
+            text=f"{current_page}/{total_pages}",
+            callback_data="ignore"
+        )
+    )
+    
+    if current_page < total_pages:
+        nav_buttons.append(
+            types.InlineKeyboardButton(
+                text="▶️",
+                callback_data=f"{prefix}_page_{current_page + 1}"
+            )
+        )
+    
+    keyboard.append(nav_buttons)
+    
+    # Add back button
+    keyboard.append([
+        types.InlineKeyboardButton(
+            text="◀️ Назад",
+            callback_data=f"back_to_{prefix}"
+        )
+    ])
+    
+    return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 def get_main_keyboard(is_admin: bool = False) -> types.ReplyKeyboardMarkup:
     """Основная клавиатура пользователя"""
@@ -188,38 +452,6 @@ def get_admin_list_keyboard(
     buttons.append([_create_button(ButtonType.BACK_TO_ADMIN.value, "admin")])
     
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
-
-def get_pagination_keyboard(page, total_pages, prefix):
-    buttons = []
-    if page > 1:
-        buttons.append(types.InlineKeyboardButton(
-            text="⬅️",
-            callback_data=f"{prefix}:page:{page-1}"
-        ))
-    buttons.append(types.InlineKeyboardButton(
-        text=f"{page}/{total_pages}",
-        callback_data="current_page"
-    ))
-    if page < total_pages:
-        buttons.append(types.InlineKeyboardButton(
-            text="➡️",
-            callback_data=f"{prefix}:page:{page+1}"
-        ))
-    return types.InlineKeyboardMarkup(inline_keyboard=[buttons])
-
-def get_confirmation_keyboard(
-    confirm_text: str = "✅ Подтвердить",
-    confirm_callback: str = "confirm",
-    cancel_text: str = "❌ Отменить",
-    cancel_callback: str = "cancel"
-) -> types.InlineKeyboardMarkup:
-    """Клавиатура подтверждения действия"""
-    return types.InlineKeyboardMarkup(inline_keyboard=[
-        [
-            _create_button(confirm_text, confirm_callback),
-            _create_button(cancel_text, cancel_callback)
-        ]
-    ])
 
 def get_admin_categories_keyboard(
     categories: List[Dict],

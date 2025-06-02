@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 import re
 from enum import Enum
 import logging
+import bcrypt
+import json
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, User
@@ -18,7 +20,7 @@ from config import (
     SESSION_TIMEOUT_MINUTES
 )
 from logging_config import admin_logger, user_logger
-from sqlite_db import db
+from sqlite_db import db, UserRole, DatabaseError
 from admin_panel import (
     is_admin,
     edit_message,
@@ -576,4 +578,375 @@ async def search_user_command(message: Message) -> None:
 
 def setup_user_handlers(dp: Router):
     """Setup user management handlers"""
-    dp.include_router(router) 
+    dp.include_router(router)
+
+class UserState(str, Enum):
+    """User states in the system"""
+    IDLE = "idle"
+    REGISTERING = "registering"
+    TAKING_TEST = "taking_test"
+    VIEWING_PRODUCT = "viewing_product"
+    ADMIN_MENU = "admin_menu"
+
+@dataclass
+class UserProfile:
+    """User profile data"""
+    telegram_id: int
+    username: Optional[str]
+    first_name: Optional[str]
+    last_name: Optional[str]
+    role: UserRole
+    is_active: bool
+    created_at: datetime
+    last_active: Optional[datetime]
+    state: Optional[UserState]
+    state_data: Optional[Dict]
+
+class UserManagementError(Exception):
+    """Base exception for user management errors"""
+    pass
+
+class UserNotFoundError(UserManagementError):
+    """Raised when user is not found"""
+    pass
+
+class UserAlreadyExistsError(UserManagementError):
+    """Raised when user already exists"""
+    pass
+
+class InvalidCredentialsError(UserManagementError):
+    """Raised when credentials are invalid"""
+    pass
+
+class UserManagement:
+    """User management class with async support"""
+    
+    def __init__(self):
+        """Initialize user management"""
+        self._db = db
+
+    async def register_user(
+        self,
+        telegram_id: int,
+        username: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        password: Optional[str] = None,
+        role: UserRole = UserRole.USER
+    ) -> bool:
+        """Register a new user"""
+        try:
+            # Check if user already exists
+            existing_user = await self._db.get_user(telegram_id)
+            if existing_user:
+                raise UserAlreadyExistsError(f"User with telegram_id {telegram_id} already exists")
+
+            # Prepare user data
+            user_data = {
+                "telegram_id": telegram_id,
+                "username": username,
+                "first_name": first_name,
+                "last_name": last_name,
+                "role": role.value,
+                "password": password
+            }
+
+            # Register user
+            success = await self._db.register_user(user_data)
+            if not success:
+                raise UserManagementError("Failed to register user")
+
+            logger.info(f"Successfully registered user {telegram_id}")
+            return True
+
+        except UserAlreadyExistsError:
+            raise
+        except Exception as e:
+            logger.error(f"Error registering user: {e}")
+            raise UserManagementError(f"Failed to register user: {e}")
+
+    async def get_user_profile(self, telegram_id: int) -> Optional[UserProfile]:
+        """Get user profile by telegram ID"""
+        try:
+            user_data = await self._db.get_user(telegram_id)
+            if not user_data:
+                return None
+
+            return UserProfile(
+                telegram_id=user_data["telegram_id"],
+                username=user_data["username"],
+                first_name=user_data["first_name"],
+                last_name=user_data["last_name"],
+                role=UserRole(user_data["role"]),
+                is_active=bool(user_data["is_active"]),
+                created_at=datetime.fromisoformat(user_data["created_at"]),
+                last_active=datetime.fromisoformat(user_data["last_active"]) if user_data["last_active"] else None,
+                state=UserState(user_data["state"]) if user_data["state"] else None,
+                state_data=json.loads(user_data["state_data"]) if user_data["state_data"] else None
+            )
+
+        except Exception as e:
+            logger.error(f"Error getting user profile: {e}")
+            raise UserManagementError(f"Failed to get user profile: {e}")
+
+    async def update_user_profile(
+        self,
+        telegram_id: int,
+        **updates: Any
+    ) -> bool:
+        """Update user profile"""
+        try:
+            # Get current user data
+            user = await self._db.get_user(telegram_id)
+            if not user:
+                raise UserNotFoundError(f"User {telegram_id} not found")
+
+            # Prepare update data
+            update_data = {}
+            allowed_fields = {
+                "username", "first_name", "last_name",
+                "role", "password", "is_active", "state", "state_data"
+            }
+
+            for field, value in updates.items():
+                if field in allowed_fields:
+                    if field == "password" and value:
+                        value = bcrypt.hashpw(value.encode(), bcrypt.gensalt()).decode()
+                    elif field == "state_data" and value:
+                        value = json.dumps(value)
+                    update_data[field] = value
+
+            if not update_data:
+                return True
+
+            # Build update query
+            set_clause = ", ".join(f"{field} = ?" for field in update_data.keys())
+            query = f"UPDATE users SET {set_clause} WHERE telegram_id = ?"
+            params = list(update_data.values()) + [telegram_id]
+
+            # Execute update
+            await self._db.execute(query, tuple(params))
+            logger.info(f"Successfully updated user {telegram_id}")
+            return True
+
+        except UserNotFoundError:
+            raise
+        except Exception as e:
+            logger.error(f"Error updating user profile: {e}")
+            raise UserManagementError(f"Failed to update user profile: {e}")
+
+    async def authenticate_user(
+        self,
+        telegram_id: int,
+        password: str
+    ) -> bool:
+        """Authenticate user with password"""
+        try:
+            return await self._db.verify_password(telegram_id, password)
+        except Exception as e:
+            logger.error(f"Error authenticating user: {e}")
+            raise UserManagementError(f"Authentication failed: {e}")
+
+    async def set_user_state(
+        self,
+        telegram_id: int,
+        state: Optional[UserState] = None,
+        state_data: Optional[Dict] = None
+    ) -> bool:
+        """Set user state and state data"""
+        try:
+            updates = {}
+            if state is not None:
+                updates["state"] = state.value
+            if state_data is not None:
+                updates["state_data"] = json.dumps(state_data)
+
+            return await self.update_user_profile(telegram_id, **updates)
+
+        except Exception as e:
+            logger.error(f"Error setting user state: {e}")
+            raise UserManagementError(f"Failed to set user state: {e}")
+
+    async def get_user_state(self, telegram_id: int) -> tuple[Optional[UserState], Optional[Dict]]:
+        """Get user state and state data"""
+        try:
+            user = await self.get_user_profile(telegram_id)
+            if not user:
+                raise UserNotFoundError(f"User {telegram_id} not found")
+
+            return user.state, user.state_data
+
+        except UserNotFoundError:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting user state: {e}")
+            raise UserManagementError(f"Failed to get user state: {e}")
+
+    async def list_users(
+        self,
+        role: Optional[UserRole] = None,
+        is_active: Optional[bool] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[UserProfile]:
+        """List users with optional filters"""
+        try:
+            # Build query
+            query = "SELECT * FROM users WHERE 1=1"
+            params = []
+
+            if role is not None:
+                query += " AND role = ?"
+                params.append(role.value)
+
+            if is_active is not None:
+                query += " AND is_active = ?"
+                params.append(int(is_active))
+
+            query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+
+            # Execute query
+            users_data = await self._db.execute(query, tuple(params))
+            return [
+                UserProfile(
+                    telegram_id=user["telegram_id"],
+                    username=user["username"],
+                    first_name=user["first_name"],
+                    last_name=user["last_name"],
+                    role=UserRole(user["role"]),
+                    is_active=bool(user["is_active"]),
+                    created_at=datetime.fromisoformat(user["created_at"]),
+                    last_active=datetime.fromisoformat(user["last_active"]) if user["last_active"] else None,
+                    state=UserState(user["state"]) if user["state"] else None,
+                    state_data=json.loads(user["state_data"]) if user["state_data"] else None
+                )
+                for user in users_data
+            ]
+
+        except Exception as e:
+            logger.error(f"Error listing users: {e}")
+            raise UserManagementError(f"Failed to list users: {e}")
+
+    async def deactivate_user(self, telegram_id: int) -> bool:
+        """Deactivate user account"""
+        try:
+            return await self.update_user_profile(telegram_id, is_active=False)
+        except Exception as e:
+            logger.error(f"Error deactivating user: {e}")
+            raise UserManagementError(f"Failed to deactivate user: {e}")
+
+    async def activate_user(self, telegram_id: int) -> bool:
+        """Activate user account"""
+        try:
+            return await self.update_user_profile(telegram_id, is_active=True)
+        except Exception as e:
+            logger.error(f"Error activating user: {e}")
+            raise UserManagementError(f"Failed to activate user: {e}")
+
+    async def change_user_role(
+        self,
+        telegram_id: int,
+        new_role: UserRole
+    ) -> bool:
+        """Change user role"""
+        try:
+            return await self.update_user_profile(telegram_id, role=new_role)
+        except Exception as e:
+            logger.error(f"Error changing user role: {e}")
+            raise UserManagementError(f"Failed to change user role: {e}")
+
+    async def get_user_stats(self, telegram_id: int) -> Dict:
+        """Get user statistics"""
+        try:
+            # Get user profile
+            user = await self.get_user_profile(telegram_id)
+            if not user:
+                raise UserNotFoundError(f"User {telegram_id} not found")
+
+            # Get test attempts
+            attempts_query = """
+                SELECT 
+                    COUNT(*) as total_attempts,
+                    SUM(CASE WHEN is_completed = 1 THEN 1 ELSE 0 END) as completed_attempts,
+                    AVG(CASE WHEN is_completed = 1 THEN score * 100.0 / max_score ELSE NULL END) as avg_score,
+                    MAX(CASE WHEN is_completed = 1 THEN score * 100.0 / max_score ELSE NULL END) as best_score
+                FROM test_attempts
+                WHERE user_id = (SELECT id FROM users WHERE telegram_id = ?)
+            """
+            attempts_data = await self._db.execute_one(attempts_query, (telegram_id,))
+
+            return {
+                "user": {
+                    "telegram_id": user.telegram_id,
+                    "username": user.username,
+                    "role": user.role.value,
+                    "is_active": user.is_active,
+                    "created_at": user.created_at.isoformat(),
+                    "last_active": user.last_active.isoformat() if user.last_active else None
+                },
+                "test_stats": {
+                    "total_attempts": attempts_data["total_attempts"] or 0,
+                    "completed_attempts": attempts_data["completed_attempts"] or 0,
+                    "avg_score": round(attempts_data["avg_score"] or 0, 2),
+                    "best_score": round(attempts_data["best_score"] or 0, 2)
+                }
+            }
+
+        except UserNotFoundError:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting user stats: {e}")
+            raise UserManagementError(f"Failed to get user stats: {e}")
+
+# Create singleton instance
+user_manager = UserManagement()
+
+# Test the module if run directly
+if __name__ == "__main__":
+    import asyncio
+
+    async def test_user_management():
+        try:
+            # Test user registration
+            test_user_id = 123456789
+            success = await user_manager.register_user(
+                telegram_id=test_user_id,
+                username="test_user",
+                first_name="Test",
+                last_name="User",
+                password="test123",
+                role=UserRole.USER
+            )
+            print(f"User registration: {'Success' if success else 'Failed'}")
+
+            # Test user profile retrieval
+            profile = await user_manager.get_user_profile(test_user_id)
+            print(f"User profile: {profile}")
+
+            # Test authentication
+            auth = await user_manager.authenticate_user(test_user_id, "test123")
+            print(f"Authentication: {'Success' if auth else 'Failed'}")
+
+            # Test state management
+            await user_manager.set_user_state(
+                test_user_id,
+                UserState.TAKING_TEST,
+                {"test_id": 1, "current_question": 1}
+            )
+            state, state_data = await user_manager.get_user_state(test_user_id)
+            print(f"User state: {state}, data: {state_data}")
+
+            # Test user listing
+            users = await user_manager.list_users(limit=10)
+            print(f"Found {len(users)} users")
+
+            # Test user stats
+            stats = await user_manager.get_user_stats(test_user_id)
+            print(f"User stats: {stats}")
+
+        except Exception as e:
+            print(f"Test failed: {e}")
+
+    # Run tests
+    asyncio.run(test_user_management()) 

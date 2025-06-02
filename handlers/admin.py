@@ -14,10 +14,18 @@ from utils.keyboards import (
     get_admin_keyboard, get_admin_categories_keyboard,
     get_admin_products_keyboard, get_admin_products_list_keyboard,
     get_admin_tests_keyboard, get_admin_stats_keyboard,
-    get_cancel_keyboard, get_confirmation_keyboard
+    get_cancel_keyboard, get_confirmation_keyboard,
+    get_admin_control_keyboard,
+    get_confirm_keyboard,
+    get_back_keyboard,
+    get_pagination_keyboard
 )
 from dispatcher import dp
 from states import CategoryForm, ProductForm, TestForm
+from utils.db_pool import db_pool
+from utils.metrics import metrics_collector
+from typing import Optional, Dict, List
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -681,6 +689,400 @@ async def cancel_handler(
     await query.answer("❌ Действие отменено")
     await send_admin_menu(query)
 
+# ===== АДМИНИСТРАТИВНЫЕ ОБРАБОТЧИКИ =====
+class AdminStates(StatesGroup):
+    """States for admin interactions."""
+    managing_users = State()
+    managing_catalog = State()
+    managing_tests = State()
+    viewing_stats = State()
+    managing_settings = State()
+    adding_category = State()
+    editing_category = State()
+    adding_product = State()
+    editing_product = State()
+    adding_test = State()
+    editing_test = State()
+    adding_question = State()
+    editing_question = State()
+
+def is_admin(user_id: int) -> bool:
+    """Check if user is an admin."""
+    return user_id in ADMIN_USER_IDS
+
+@dp.message(Command("admin"))
+@dp.message(F.text == "⚙️ Управление")
+async def show_admin_panel(message: Message, state: FSMContext):
+    """Show admin control panel."""
+    if not is_admin(message.from_user.id):
+        await message.answer("❌ У вас нет доступа к панели управления.")
+        return
+    
+    try:
+        await message.answer(
+            "⚙️ Панель управления\n\n"
+            "Выберите раздел для управления:",
+            reply_markup=get_admin_control_keyboard()
+        )
+        await state.set_state(AdminStates.managing_settings)
+        
+        # Track metrics
+        metrics_collector.increment_message_count()
+        
+    except Exception as e:
+        logger.error(f"Error showing admin panel: {e}")
+        await message.answer(
+            "😔 Произошла ошибка при загрузке панели управления. Попробуйте позже.",
+            reply_markup=get_back_keyboard()
+        )
+
+@dp.callback_query(F.data == "admin_users")
+async def manage_users(callback: CallbackQuery, state: FSMContext):
+    """Show user management interface."""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    try:
+        # Get user statistics
+        total_users = await db_pool.fetchone(
+            "SELECT COUNT(*) as count FROM users"
+        )
+        active_users = await db_pool.fetchone(
+            """
+            SELECT COUNT(DISTINCT user_id) as count 
+            FROM user_activity 
+            WHERE last_active > ?
+            """,
+            (datetime.now() - timedelta(days=7),)
+        )
+        test_stats = await db_pool.fetchone(
+            """
+            SELECT 
+                COUNT(DISTINCT user_id) as users_with_tests,
+                AVG(score) as avg_score
+            FROM test_attempts
+            WHERE completed_at IS NOT NULL
+            """
+        )
+        
+        # Format statistics message
+        stats_text = "👥 Управление пользователями\n\n"
+        stats_text += f"📊 Статистика:\n"
+        stats_text += f"• Всего пользователей: {total_users['count']}\n"
+        stats_text += f"• Активных за неделю: {active_users['count']}\n"
+        if test_stats['users_with_tests']:
+            stats_text += f"• Прошли тесты: {test_stats['users_with_tests']}\n"
+            stats_text += f"• Средний балл: {test_stats['avg_score']:.1f}%\n"
+        
+        # Get recent user activity
+        recent_activity = await db_pool.fetchall(
+            """
+            SELECT u.*, ua.last_active, ua.message_count
+            FROM users u
+            JOIN user_activity ua ON u.id = ua.user_id
+            ORDER BY ua.last_active DESC
+            LIMIT 5
+            """
+        )
+        
+        if recent_activity:
+            stats_text += "\n🔄 Последняя активность:\n"
+            for user in recent_activity:
+                stats_text += f"• {user['username'] or user['first_name']}\n"
+                stats_text += f"  📝 Сообщений: {user['message_count']}\n"
+                stats_text += f"  ⏱ Последняя активность: {user['last_active']}\n"
+        
+        await callback.message.edit_text(
+            stats_text,
+            reply_markup=get_admin_control_keyboard()
+        )
+        await state.set_state(AdminStates.managing_users)
+        
+        # Track metrics
+        metrics_collector.increment_message_count()
+        
+    except Exception as e:
+        logger.error(f"Error managing users: {e}")
+        await callback.message.edit_text(
+            "😔 Произошла ошибка при загрузке данных пользователей. Попробуйте позже.",
+            reply_markup=get_back_keyboard()
+        )
+
+@dp.callback_query(F.data == "admin_catalog")
+async def manage_catalog(callback: CallbackQuery, state: FSMContext):
+    """Show catalog management interface."""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    try:
+        # Get catalog statistics
+        categories_count = await db_pool.fetchone(
+            "SELECT COUNT(*) as count FROM categories WHERE is_active = 1"
+        )
+        products_count = await db_pool.fetchone(
+            "SELECT COUNT(*) as count FROM products WHERE is_active = 1"
+        )
+        
+        # Format statistics message
+        stats_text = "📚 Управление каталогом\n\n"
+        stats_text += f"📊 Статистика:\n"
+        stats_text += f"• Категорий: {categories_count['count']}\n"
+        stats_text += f"• Товаров: {products_count['count']}\n"
+        
+        # Get recent additions
+        recent_products = await db_pool.fetchall(
+            """
+            SELECT p.*, c.name as category_name
+            FROM products p
+            JOIN categories c ON p.category_id = c.id
+            WHERE p.is_active = 1
+            ORDER BY p.created_at DESC
+            LIMIT 5
+            """
+        )
+        
+        if recent_products:
+            stats_text += "\n🆕 Последние добавленные товары:\n"
+            for product in recent_products:
+                stats_text += f"• {product['name']}\n"
+                stats_text += f"  📚 Категория: {product['category_name']}\n"
+                if product['price']:
+                    stats_text += f"  💰 {product['price']} руб.\n"
+        
+        # Add management options
+        stats_text += "\n⚙️ Действия:\n"
+        stats_text += "• Добавить категорию\n"
+        stats_text += "• Добавить товар\n"
+        stats_text += "• Редактировать категории\n"
+        stats_text += "• Редактировать товары\n"
+        
+        await callback.message.edit_text(
+            stats_text,
+            reply_markup=get_admin_control_keyboard()
+        )
+        await state.set_state(AdminStates.managing_catalog)
+        
+        # Track metrics
+        metrics_collector.increment_message_count()
+        
+    except Exception as e:
+        logger.error(f"Error managing catalog: {e}")
+        await callback.message.edit_text(
+            "😔 Произошла ошибка при загрузке данных каталога. Попробуйте позже.",
+            reply_markup=get_back_keyboard()
+        )
+
+@dp.callback_query(F.data == "admin_tests")
+async def manage_tests(callback: CallbackQuery, state: FSMContext):
+    """Show test management interface."""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    try:
+        # Get test statistics
+        tests_count = await db_pool.fetchone(
+            "SELECT COUNT(*) as count FROM tests WHERE is_active = 1"
+        )
+        questions_count = await db_pool.fetchone(
+            "SELECT COUNT(*) as count FROM test_questions"
+        )
+        attempts_count = await db_pool.fetchone(
+            """
+            SELECT 
+                COUNT(*) as total_attempts,
+                COUNT(DISTINCT user_id) as unique_users,
+                AVG(score) as avg_score
+            FROM test_attempts
+            WHERE completed_at IS NOT NULL
+            """
+        )
+        
+        # Format statistics message
+        stats_text = "📝 Управление тестами\n\n"
+        stats_text += f"📊 Статистика:\n"
+        stats_text += f"• Активных тестов: {tests_count['count']}\n"
+        stats_text += f"• Вопросов: {questions_count['count']}\n"
+        if attempts_count['total_attempts']:
+            stats_text += f"• Всего попыток: {attempts_count['total_attempts']}\n"
+            stats_text += f"• Уникальных пользователей: {attempts_count['unique_users']}\n"
+            stats_text += f"• Средний балл: {attempts_count['avg_score']:.1f}%\n"
+        
+        # Get recent test results
+        recent_results = await db_pool.fetchall(
+            """
+            SELECT 
+                t.name as test_name,
+                u.username,
+                ta.score,
+                ta.completed_at
+            FROM test_attempts ta
+            JOIN tests t ON ta.test_id = t.id
+            JOIN users u ON ta.user_id = u.id
+            WHERE ta.completed_at IS NOT NULL
+            ORDER BY ta.completed_at DESC
+            LIMIT 5
+            """
+        )
+        
+        if recent_results:
+            stats_text += "\n📊 Последние результаты:\n"
+            for result in recent_results:
+                stats_text += f"• {result['test_name']}\n"
+                stats_text += f"  👤 {result['username']}\n"
+                stats_text += f"  📈 {result['score']}%\n"
+                stats_text += f"  ⏱ {result['completed_at']}\n"
+        
+        # Add management options
+        stats_text += "\n⚙️ Действия:\n"
+        stats_text += "• Добавить тест\n"
+        stats_text += "• Редактировать тесты\n"
+        stats_text += "• Просмотр результатов\n"
+        stats_text += "• Экспорт статистики\n"
+        
+        await callback.message.edit_text(
+            stats_text,
+            reply_markup=get_admin_control_keyboard()
+        )
+        await state.set_state(AdminStates.managing_tests)
+        
+        # Track metrics
+        metrics_collector.increment_message_count()
+        
+    except Exception as e:
+        logger.error(f"Error managing tests: {e}")
+        await callback.message.edit_text(
+            "😔 Произошла ошибка при загрузке данных тестов. Попробуйте позже.",
+            reply_markup=get_back_keyboard()
+        )
+
+@dp.callback_query(F.data == "admin_stats")
+async def view_stats(callback: CallbackQuery, state: FSMContext):
+    """Show detailed bot statistics."""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    try:
+        # Get general statistics
+        users_count = await db_pool.fetchone(
+            "SELECT COUNT(*) as count FROM users"
+        )
+        messages_count = await db_pool.fetchone(
+            "SELECT SUM(message_count) as count FROM user_activity"
+        )
+        tests_count = await db_pool.fetchone(
+            "SELECT COUNT(*) as count FROM test_attempts WHERE completed_at IS NOT NULL"
+        )
+        
+        # Get activity statistics
+        daily_activity = await db_pool.fetchall(
+            """
+            SELECT 
+                DATE(last_active) as date,
+                COUNT(DISTINCT user_id) as active_users,
+                SUM(message_count) as messages
+            FROM user_activity
+            WHERE last_active > ?
+            GROUP BY DATE(last_active)
+            ORDER BY date DESC
+            LIMIT 7
+            """,
+            (datetime.now() - timedelta(days=7),)
+        )
+        
+        # Format statistics message
+        stats_text = "📊 Статистика бота\n\n"
+        stats_text += f"📈 Общая статистика:\n"
+        stats_text += f"• Пользователей: {users_count['count']}\n"
+        stats_text += f"• Сообщений: {messages_count['count'] or 0}\n"
+        stats_text += f"• Пройдено тестов: {tests_count['count']}\n"
+        
+        if daily_activity:
+            stats_text += "\n📅 Активность за неделю:\n"
+            for day in daily_activity:
+                stats_text += f"• {day['date']}:\n"
+                stats_text += f"  👥 Активных: {day['active_users']}\n"
+                stats_text += f"  💬 Сообщений: {day['messages']}\n"
+        
+        # Get system metrics
+        metrics = metrics_collector.get_latest_metrics()
+        if metrics:
+            stats_text += "\n💻 Системные метрики:\n"
+            stats_text += f"• CPU: {metrics['cpu_percent']}%\n"
+            stats_text += f"• Память: {metrics['memory_percent']}%\n"
+            stats_text += f"• Диск: {metrics['disk_percent']}%\n"
+            stats_text += f"• Аптайм: {metrics['uptime']}\n"
+        
+        await callback.message.edit_text(
+            stats_text,
+            reply_markup=get_admin_control_keyboard()
+        )
+        await state.set_state(AdminStates.viewing_stats)
+        
+        # Track metrics
+        metrics_collector.increment_message_count()
+        
+    except Exception as e:
+        logger.error(f"Error viewing stats: {e}")
+        await callback.message.edit_text(
+            "😔 Произошла ошибка при загрузке статистики. Попробуйте позже.",
+            reply_markup=get_back_keyboard()
+        )
+
+@dp.callback_query(F.data == "admin_settings")
+async def manage_settings(callback: CallbackQuery, state: FSMContext):
+    """Show bot settings management interface."""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    try:
+        # Get current settings
+        settings = await db_pool.fetchall(
+            "SELECT * FROM settings"
+        )
+        
+        # Format settings message
+        settings_text = "⚙️ Управление настройками\n\n"
+        settings_text += "📋 Текущие настройки:\n"
+        
+        for setting in settings:
+            settings_text += f"• {setting['name']}: {setting['value']}\n"
+            if setting['description']:
+                settings_text += f"  {setting['description']}\n"
+        
+        # Add management options
+        settings_text += "\n⚙️ Действия:\n"
+        settings_text += "• Изменить настройки\n"
+        settings_text += "• Сбросить настройки\n"
+        settings_text += "• Экспорт настроек\n"
+        settings_text += "• Импорт настроек\n"
+        
+        await callback.message.edit_text(
+            settings_text,
+            reply_markup=get_admin_control_keyboard()
+        )
+        await state.set_state(AdminStates.managing_settings)
+        
+        # Track metrics
+        metrics_collector.increment_message_count()
+        
+    except Exception as e:
+        logger.error(f"Error managing settings: {e}")
+        await callback.message.edit_text(
+            "😔 Произошла ошибка при загрузке настроек. Попробуйте позже.",
+            reply_markup=get_back_keyboard()
+        )
+
+@dp.callback_query(F.data == "back_to_main")
+async def back_to_admin_panel(callback: CallbackQuery, state: FSMContext):
+    """Return to admin panel."""
+    await state.clear()
+    await show_admin_panel(callback.message, state)
+
 __all__ = [
     'admin_handler',
     'admin_categories_handler',
@@ -697,5 +1099,12 @@ __all__ = [
     'admin_test_delete_handler',
     'create_test_handler',
     'admin_stats_handler',
-    'admin_search_products_handler'
+    'admin_search_products_handler',
+    'show_admin_panel',
+    'manage_users',
+    'manage_catalog',
+    'manage_tests',
+    'view_stats',
+    'manage_settings',
+    'back_to_admin_panel'
 ]

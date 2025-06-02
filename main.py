@@ -1,176 +1,188 @@
-import logging
-import os
-import sys
+"""Main application module."""
+
 import asyncio
-from aiohttp import web
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+import logging
+import signal
+import sys
+from typing import Optional
+
+from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 
-# Import local modules
 from config import (
-    BOT_TOKEN, WEBAPP_HOST, WEBAPP_PORT, WEBHOOK_URL, WEBHOOK_PATH,
-    validate_config, IS_PRODUCTION, ADMIN_IDS
+    BOT_TOKEN,
+    WEBHOOK_HOST,
+    WEBHOOK_PATH,
+    WEBHOOK_PORT,
+    WEBHOOK_SSL_CERT,
+    WEBHOOK_SSL_PRIV,
+    ENABLE_WEBHOOK,
+    ENABLE_METRICS,
+    LOG_LEVEL
 )
-from logging_config import setup_logging
-from sqlite_db import init_db, close_db
-from middleware import setup_middleware
-from dispatcher import setup_handlers
-from user_management import setup_user_handlers
-from admin_handlers import setup_admin_handlers
-from product_management import setup_product_handlers
-from category_management import setup_category_handlers
-from test_management import setup_test_handlers
+from middleware import (
+    metrics_middleware,
+    error_handling_middleware,
+    state_management_middleware,
+    logging_middleware,
+    AdminAccessMiddleware,
+    UserActivityMiddleware,
+    RateLimitMiddleware
+)
+from monitoring.metrics import metrics_collector
+from utils.error_handling import handle_errors, log_operation
 
-# Setup logging
-logger = setup_logging()
-logger.info("[BOOT] main.py started")
+# Configure logging
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-# Validate configuration
-try:
-    validate_config()
-except ValueError as e:
-    logger.error(f"[ERROR] Configuration validation failed: {e}")
-    sys.exit(1)
-
-# Create bot and dispatcher
+# Initialize bot and dispatcher
 bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 
-# Setup middleware
-setup_middleware(dp)
+# Store webhook handler for cleanup
+webhook_handler: Optional[SimpleRequestHandler] = None
 
-# Setup handlers
-setup_handlers(dp)
-setup_user_handlers(dp)
-setup_admin_handlers(dp)
-setup_product_handlers(dp)
-setup_category_handlers(dp)
-setup_test_handlers(dp)
-
-# Basic command handlers
-@dp.message(Command("start"))
-async def start_handler(message: types.Message):
-    user_id = message.from_user.id
-    is_admin = user_id in ADMIN_IDS
+@handle_errors
+@log_operation
+async def on_startup() -> None:
+    """Initialize application on startup."""
+    logger.info("Starting up application...")
     
-    welcome_text = (
-        "👋 Добро пожаловать в Корпоративную Базу Знаний!\n\n"
-        "Я помогу вам изучить нашу продукцию и пройти тестирование.\n\n"
+    # Start metrics collection if enabled
+    if ENABLE_METRICS:
+        metrics_collector.start()
+        logger.info("Metrics collection started")
+    
+    # Register middleware
+    dp.update.middleware(metrics_middleware)
+    dp.update.middleware(error_handling_middleware)
+    dp.update.middleware(state_management_middleware)
+    dp.update.middleware(logging_middleware)
+    dp.update.middleware(AdminAccessMiddleware())
+    dp.update.middleware(UserActivityMiddleware())
+    dp.update.middleware(RateLimitMiddleware())
+    logger.info("Middleware registered")
+    
+    # Register handlers
+    from handlers import (
+        register_user_handlers,
+        register_catalog_handlers,
+        register_test_handlers,
+        register_admin_handlers
     )
     
-    if is_admin:
-        welcome_text += (
-            "🔐 Вы авторизованы как администратор.\n"
-            "Используйте /admin для доступа к панели управления."
+    register_user_handlers(dp)
+    register_catalog_handlers(dp)
+    register_test_handlers(dp)
+    register_admin_handlers(dp)
+    logger.info("Handlers registered")
+    
+    # Setup webhook if enabled
+    if ENABLE_WEBHOOK:
+        global webhook_handler
+        webhook_handler = SimpleRequestHandler(
+            dispatcher=dp,
+            bot=bot,
+            handle_signals=False
         )
-    else:
-        welcome_text += (
-            "📚 Доступные команды:\n"
-            "/catalog - Просмотр каталога продукции\n"
-            "/search - Поиск по базе знаний\n"
-            "/tests - Доступные тесты\n"
-            "/help - Справка по использованию бота"
+        
+        app = web.Application()
+        webhook_handler.register(app, path=WEBHOOK_PATH)
+        setup_application(app, dp, bot=bot)
+        
+        # Start webhook server
+        await web._run_app(
+            app,
+            host=WEBHOOK_HOST,
+            port=WEBHOOK_PORT,
+            ssl_context={
+                'cert': WEBHOOK_SSL_CERT,
+                'key': WEBHOOK_SSL_PRIV
+            } if WEBHOOK_SSL_CERT and WEBHOOK_SSL_PRIV else None
         )
-    
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📚 Каталог"), KeyboardButton(text="🔍 Поиск")],
-            [KeyboardButton(text="📝 Тесты"), KeyboardButton(text="❓ Помощь")]
-        ],
-        resize_keyboard=True
-    )
-    
-    if is_admin:
-        keyboard.keyboard.append([KeyboardButton(text="⚙️ Панель управления")])
-    
-    await message.answer(welcome_text, reply_markup=keyboard)
-
-@dp.message(Command("help"))
-async def help_handler(message: types.Message):
-    help_text = (
-        "📚 <b>Справка по использованию бота</b>\n\n"
-        "Основные команды:\n"
-        "/start - Начать работу с ботом\n"
-        "/catalog - Просмотр каталога продукции\n"
-        "/search - Поиск по базе знаний\n"
-        "/tests - Доступные тесты\n"
-        "/help - Показать эту справку\n\n"
-        "Для поиска информации используйте команду /search\n"
-        "Для прохождения тестов используйте команду /tests\n"
-        "Для просмотра каталога используйте команду /catalog"
-    )
-    
-    if message.from_user.id in ADMIN_IDS:
-        help_text += "\n\n<b>Команды администратора:</b>\n"
-        help_text += "/admin - Панель управления\n"
-        help_text += "/stats - Статистика использования\n"
-    
-    await message.answer(help_text)
-
-# Create aiohttp app
-app = web.Application()
-
-# Health check endpoint
-async def health(request):
-    logger.info("[HTTP] /health requested")
-    return web.Response(text="OK")
-app.router.add_get("/health", health)
-
-# Root endpoint
-async def root(request):
-    logger.info("[HTTP] / requested")
-    return web.Response(text="Bot server is running")
-app.router.add_get("/", root)
-
-# Webhook handler
-async def webhook_handler(request):
-    logger.info("[HTTP] /webhook POST received")
-    try:
-        update = types.Update.model_validate(await request.json())
-        await dp.feed_update(bot, update)
-    except Exception as e:
-        logger.error(f"[ERROR] Webhook handler: {e}", exc_info=True)
-    return web.Response(text="OK")
-app.router.add_post(WEBHOOK_PATH, webhook_handler)
-
-# Startup
-async def on_startup(app):
-    logger.info("[STARTUP] Initializing application...")
-    
-    # Initialize database
-    await init_db()
-    
-    if IS_PRODUCTION:
-        logger.info("[STARTUP] Setting webhook for production mode...")
-        await bot.set_webhook(WEBHOOK_URL)
-        logger.info(f"[STARTUP] Webhook set to {WEBHOOK_URL}")
+        logger.info(f"Webhook server started at {WEBHOOK_HOST}:{WEBHOOK_PORT}")
     else:
-        logger.info("[STARTUP] Running in development mode (polling)")
-        # Start polling in development mode
-        asyncio.create_task(dp.start_polling(bot))
+        # Start polling
+        await dp.start_polling(bot)
+        logger.info("Bot started in polling mode")
 
-app.on_startup.append(on_startup)
-
-# Shutdown
-async def on_shutdown(app):
-    logger.info("[SHUTDOWN] Shutting down application...")
+@handle_errors
+@log_operation
+async def on_shutdown() -> None:
+    """Cleanup on shutdown."""
+    logger.info("Shutting down application...")
     
-    if IS_PRODUCTION:
-        await bot.delete_webhook()
+    # Stop metrics collection
+    if ENABLE_METRICS:
+        metrics_collector.stop()
+        logger.info("Metrics collection stopped")
     
-    await close_db()
+    # Stop webhook if running
+    if webhook_handler:
+        await webhook_handler.shutdown()
+        logger.info("Webhook server stopped")
+    
+    # Close bot session
     await bot.session.close()
-    
-    logger.info("[SHUTDOWN] Application shutdown complete")
+    logger.info("Bot session closed")
 
-app.on_shutdown.append(on_shutdown)
+async def health_check(request: web.Request) -> web.Response:
+    """Health check endpoint."""
+    try:
+        # Get metrics if enabled
+        if ENABLE_METRICS:
+            metrics = metrics_collector.get_metrics()
+            return web.json_response({
+                "status": "healthy",
+                "metrics": metrics
+            })
+        return web.json_response({"status": "healthy"})
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return web.json_response(
+            {"status": "unhealthy", "error": str(e)},
+            status=500
+        )
+
+def handle_exception(loop: asyncio.AbstractEventLoop, context: dict) -> None:
+    """Handle uncaught exceptions."""
+    msg = context.get("exception", context["message"])
+    logger.error(f"Uncaught exception: {msg}", exc_info=context.get("exception"))
+    
+    # Record error in metrics if enabled
+    if ENABLE_METRICS:
+        metrics_collector.increment_error_count("uncaught_exception")
+
+def main() -> None:
+    """Main application entry point."""
+    try:
+        # Setup signal handlers
+        loop = asyncio.get_event_loop()
+        loop.set_exception_handler(handle_exception)
+        
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(
+                sig,
+                lambda: asyncio.create_task(on_shutdown())
+            )
+        
+        # Create web application for health check
+        app = web.Application()
+        app.router.add_get("/health", health_check)
+        
+        # Start application
+        loop.run_until_complete(on_startup())
+        loop.run_forever()
+        
+    except Exception as e:
+        logger.error(f"Application failed to start: {e}", exc_info=True)
+        sys.exit(1)
 
 if __name__ == "__main__":
-    if IS_PRODUCTION:
-        logger.info("[MAIN] Starting web server in production mode...")
-        web.run_app(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
-    else:
-        logger.info("[MAIN] Starting bot in development mode (polling)...")
-        asyncio.run(dp.start_polling(bot))
+    main()

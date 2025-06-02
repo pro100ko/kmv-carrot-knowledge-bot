@@ -1,29 +1,88 @@
-# KMV Carrot Knowledge Bot
+# Knowledge Bot
 
-Telegram bot for corporate training in a company selling fruits, vegetables, berries, nuts, and dried fruits. The bot serves as a knowledge base and testing platform for employees.
+A Telegram bot for managing and testing knowledge about products and categories. Built with Python and aiogram, designed to run efficiently on Render's free tier.
 
 ## Features
 
-- User authentication (administrators and regular users)
-- Knowledge base with product cards
-- Employee testing system
-- Search functionality for product cards
-- Administrative panel for managing content and tests
+- User Management
+  - Registration and authentication
+  - Role-based access control (admin/user)
+  - Session management
+  - Activity tracking
 
-## Technical Stack
+- Test Management
+  - Create and edit tests
+  - Multiple question types
+  - Time limits and scoring
+  - Test results tracking
 
-- Python 3.11+
-- aiogram 3.20.0 (Telegram Bot Framework)
-- SQLite (Database)
-- aiohttp (Web Framework)
-- Gunicorn (WSGI Server)
+- Knowledge Base
+  - Category management
+  - Product management
+  - Search functionality
+  - Product viewing
 
-## Local Development Setup
+- Admin Panel
+  - User management
+  - Test management
+  - Category and product management
+  - Statistics and monitoring
+
+## Technical Features
+
+- Efficient resource management
+  - Connection pooling for database operations
+  - Memory usage monitoring and limits
+  - Rate limiting for API requests
+  - Automatic cleanup of old data
+
+- Robust error handling
+  - Comprehensive logging
+  - Graceful error recovery
+  - Transaction management
+  - Backup and restore capabilities
+
+- Monitoring and maintenance
+  - System health monitoring
+  - Performance metrics collection
+  - Database backup and migration
+  - Resource usage tracking
+
+## Project Structure
+
+```
+.
+├── alembic/              # Database migrations
+├── backups/             # Database backups
+├── data/               # Data files
+├── handlers/           # Bot command handlers
+│   ├── admin.py       # Admin commands
+│   ├── user.py        # User commands
+│   └── knowledge.py   # Knowledge base commands
+├── migrations/         # Migration files
+├── monitoring/         # Monitoring tools
+├── scripts/           # Utility scripts
+├── tests/             # Test files
+├── utils/             # Utility modules
+│   ├── db_pool.py     # Database connection pool
+│   ├── keyboards.py   # Keyboard layouts
+│   ├── message_utils.py # Message handling
+│   └── resource_manager.py # Resource management
+├── config.py          # Configuration
+├── dispatcher.py      # Bot dispatcher
+├── logging_config.py  # Logging setup
+├── main.py           # Application entry point
+├── middleware.py     # Middleware components
+├── sqlite_db.py      # Database operations
+└── requirements.txt   # Dependencies
+```
+
+## Setup
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/kmv-carrot-knowledge-bot.git
-cd kmv-carrot-knowledge-bot
+git clone https://github.com/yourusername/knowledge-bot.git
+cd knowledge-bot
 ```
 
 2. Create and activate a virtual environment:
@@ -37,66 +96,101 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Create a `.env` file with the following variables:
+4. Create a `.env` file with your configuration:
 ```env
-BOT_TOKEN=your_telegram_bot_token
-WEBHOOK_URL=your_webhook_url  # Only needed for production
-WEBHOOK_PATH=/webhook
-ENVIRONMENT=development
-ADMIN_USER_IDS=123456789,987654321  # Comma-separated list of admin Telegram IDs
+# Bot settings
+BOT_TOKEN=your_bot_token
+WEBAPP_HOST=0.0.0.0
+WEBAPP_PORT=8000
+WEBHOOK_URL=https://your-domain.com/webhook
+ENABLE_WEBHOOK=true
+
+# Admin settings
+ADMIN_IDS=123456789,987654321
+ENABLE_ADMIN_PANEL=true
+
+# Database settings
+DB_FILE=knowledge_bot.db
+DB_BACKUP_DIR=backups
+DB_MIGRATIONS_DIR=migrations
+DB_POOL_SIZE=5
+
+# Resource limits
+MAX_MEMORY_USAGE_MB=512
+MAX_CPU_USAGE_PERCENT=80
+RATE_LIMIT_MESSAGES=20
+RATE_LIMIT_CALLBACKS=30
+RATE_LIMIT_WINDOW=60
+
+# Monitoring
+ENABLE_METRICS=true
+METRICS_DIR=metrics
+METRICS_RETENTION_DAYS=7
 ```
 
-5. Run the bot in development mode:
+5. Initialize the database:
+```bash
+python scripts/migrate_db.py
+```
+
+6. Run the bot:
 ```bash
 python main.py
 ```
 
-## Deployment on Render
+## Development
 
-1. Fork this repository to your GitHub account
-
-2. Create a new Web Service on Render:
-   - Connect your GitHub repository
-   - Select "Python" as the environment
-   - The build command and start command are already configured in `render.yaml`
-
-3. Configure the following environment variables in Render:
-   - `BOT_TOKEN`: Your Telegram bot token
-   - `WEBHOOK_URL`: Your Render service URL (e.g., https://your-app.onrender.com)
-   - `ADMIN_USER_IDS`: Comma-separated list of admin Telegram IDs
-
-4. Deploy the service
-
-## Project Structure
-
-```
-.
-├── main.py              # Main bot application
-├── config.py            # Configuration settings
-├── sqlite_db.py         # Database operations
-├── dispatcher.py        # Bot dispatcher setup
-├── handlers/            # Bot command handlers
-│   ├── admin.py         # Admin panel handlers
-│   ├── knowledge_base.py # Knowledge base handlers
-│   ├── testing.py       # Testing system handlers
-│   └── user_management.py # User management handlers
-├── utils/              # Utility functions
-├── requirements.txt    # Python dependencies
-└── render.yaml        # Render deployment configuration
+### Running Tests
+```bash
+python -m pytest tests/
 ```
 
-## Database Schema
+### Database Migrations
+To create a new migration:
+1. Create a new JSON file in `migrations/` with a sequential number
+2. Add your SQL queries to the file
+3. Run migrations:
+```bash
+python scripts/migrate_db.py
+```
 
-The bot uses SQLite with the following main tables:
-- `users`: User information and authentication
-- `categories`: Product categories
-- `products`: Product information
-- `product_images`: Product images
-- `tests`: Test definitions
-- `questions`: Test questions
-- `options`: Question options
-- `test_attempts`: User test attempts
-- `user_answers`: User test answers
+### Database Backups
+To create a backup:
+```bash
+python scripts/backup_db.py
+```
+
+### System Monitoring
+To monitor system health:
+```bash
+python scripts/monitor_system.py
+```
+
+## Deployment
+
+The bot is designed to run on Render's free tier. Follow these steps to deploy:
+
+1. Create a new Web Service on Render
+2. Connect your GitHub repository
+3. Set the following:
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `python main.py`
+   - Environment Variables: Add all variables from your `.env` file
+
+## Resource Management
+
+The bot is optimized for Render's free tier limitations:
+- Memory limit: 512MB
+- CPU: Shared
+- Storage: 1GB
+- Bandwidth: Limited
+
+To ensure efficient operation:
+- Database connections are pooled
+- Memory usage is monitored
+- Rate limiting is enforced
+- Old data is automatically cleaned up
+- Backups are compressed
 
 ## Contributing
 

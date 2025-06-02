@@ -4,35 +4,61 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environment
-.venv/
+.env
+.venv
+env/
 venv/
 ENV/
-env/
-.env
-.env.*
-!.env.example
+env.bak/
+venv.bak/
+.python-version
 
-# Database
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Project specific
 *.db
 *.sqlite
 *.sqlite3
+*.log
+logs/
+metrics/
+backups/
+data/
+*.bak
+*.tmp
+*.temp
+
+# Poetry
+poetry.lock
+
+# Virtual Environment
+venv/
+env/
+ENV/
 
 # IDE
 .idea/
@@ -44,46 +70,51 @@ env/
 # Logs
 *.log
 logs/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+log/
 
-# Node (if any frontend is added later)
-node_modules/
-dist/
-dist-ssr/
-*.local
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Backups
+backups/
+*.backup
+*.bak
 
 # Environment variables
 .env
 .env.*
 !.env.example
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-morkovka-kmv-bot-31365aded116.json
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+coverage.xml
+*.cover
 
-# Ignore webhook secrets
-webhook_secret.txt
-webhook.env
-*webhook*
-.env
+# Documentation
+docs/_build/
+site/
+
+# Metrics and monitoring
+metrics/
+monitoring/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+.pytest_cache/
+
+# Local development
+local_settings.py
+db.sqlite3
+media/
+static/
+
+# Render
+.render-buildpacks.json

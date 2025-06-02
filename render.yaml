@@ -2,33 +2,83 @@ services:
   - type: web
     name: kmv-carrot-knowledge-bot
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    region: oregon  # Choose the closest region to your users
+    plan: free
+    buildCommand: |
+      python -m pip install --upgrade pip
+      pip install poetry
+      poetry config virtualenvs.create false
+      poetry install --no-dev --no-interaction --no-ansi
+    startCommand: |
+      if [ "$ENVIRONMENT" = "production" ]; then
+        poetry run gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+      else
+        poetry run python main.py
+      fi
+    healthCheckPath: /health
+    autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
-      - key: BOT_TOKEN
-        sync: false
+      - key: POETRY_VERSION
+        value: 1.7.1
       - key: ENVIRONMENT
         value: production
-      - key: ADMIN_IDS
+      - key: BOT_TOKEN
         sync: false
       - key: WEBHOOK_HOST
-        fromService:
-          type: web
-          name: kmv-carrot-knowledge-bot
-          envVarKey: RENDER_EXTERNAL_URL
+        sync: false
       - key: WEBHOOK_PATH
         value: /webhook
-      - key: WEBAPP_HOST
-        value: 0.0.0.0
-      - key: PORT
-        value: 8443
-      - key: DB_DIR
-        value: /opt/render/project/src/data
-      - key: DB_BACKUP_DIR
-        value: /opt/render/project/src/data/backups
-      - key: LOG_DIR
-        value: /opt/render/project/src/logs
-    healthCheckPath: /health
-    autoDeploy: true 
+      - key: WEBHOOK_PORT
+        value: 10000
+      - key: ENABLE_WEBHOOK
+        value: "true"
+      - key: ENABLE_METRICS
+        value: "true"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: ADMIN_IDS
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: METRICS_RETENTION_DAYS
+        value: "7"
+      - key: METRICS_COLLECTION_INTERVAL
+        value: "60"
+      - key: METRICS_CLEANUP_INTERVAL
+        value: "86400"
+      - key: RATE_LIMIT_MESSAGES
+        value: "20"
+      - key: RATE_LIMIT_CALLBACKS
+        value: "30"
+      - key: RATE_LIMIT_WINDOW
+        value: "60"
+    disk:
+      name: knowledge-bot-data
+      mountPath: /data
+      sizeGB: 1
+    scaling:
+      minInstances: 1
+      maxInstances: 1
+    alerts:
+      - type: deployment
+        disabled: false
+      - type: instance
+        disabled: false
+      - type: disk
+        disabled: false
+        threshold: 80  # Alert when disk usage reaches 80%
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-XSS-Protection
+        value: 1; mode=block
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000; includeSubDomains 

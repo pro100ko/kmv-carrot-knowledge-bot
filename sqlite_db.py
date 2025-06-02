@@ -2,7 +2,7 @@ import aiosqlite
 import os
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Union, Tuple, AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -11,19 +11,16 @@ import json
 import bcrypt
 from pathlib import Path
 
+from config import DB_FILE, DB_TIMEOUT, DB_BACKUP_DIR, DB_POOL_SIZE, DB_MIGRATIONS_DIR
+from utils.db_pool import db_pool, with_connection
+from utils.resource_manager import log_execution_time
+
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# Database constants
-DB_FILE = "morkovka_bot.db"
-DB_TIMEOUT = 30  # seconds for connection timeout
-DB_BACKUP_DIR = "backups"  # directory for database backups
-DB_POOL_SIZE = 5  # number of connections in the pool
-DB_MIGRATIONS_DIR = "migrations"  # directory for database migrations
 
 class DatabaseError(Exception):
     """Base exception for database errors"""
@@ -121,7 +118,7 @@ class DatabasePool:
             self._initialized = False
 
 class Database:
-    """Main database class with async support"""
+    """Base database class with connection pool support"""
     
     _instance = None
     _pool: Optional[DatabasePool] = None
@@ -133,13 +130,105 @@ class Database:
         return cls._instance
     
     def __init__(self):
-        """Initialize database connection pool"""
-        if self._initialized:
-            return
-        
+        """Initialize database connection"""
+        self._pool = db_pool
         self._initialized = True
-        self._pool = DatabasePool()
         
+    @with_connection
+    async def execute(self, conn: aiosqlite.Connection, query: str, params: tuple = ()) -> None:
+        """Execute a query without returning results"""
+        try:
+            await conn.execute(query, params)
+            await conn.commit()
+        except Exception as e:
+            await conn.rollback()
+            logger.error(f"Database error executing query: {e}")
+            raise
+    
+    @with_connection
+    async def execute_many(self, conn: aiosqlite.Connection, query: str, params_list: List[tuple]) -> None:
+        """Execute multiple queries"""
+        try:
+            await conn.executemany(query, params_list)
+            await conn.commit()
+        except Exception as e:
+            await conn.rollback()
+            logger.error(f"Database error executing many queries: {e}")
+            raise
+    
+    @with_connection
+    async def fetch_one(self, conn: aiosqlite.Connection, query: str, params: tuple = ()) -> Optional[tuple]:
+        """Fetch a single row from the database"""
+        try:
+            async with conn.execute(query, params) as cursor:
+                return await cursor.fetchone()
+        except Exception as e:
+            logger.error(f"Database error fetching one row: {e}")
+            raise
+    
+    @with_connection
+    async def fetch_all(self, conn: aiosqlite.Connection, query: str, params: tuple = ()) -> List[tuple]:
+        """Fetch all rows from the database"""
+        try:
+            async with conn.execute(query, params) as cursor:
+                return await cursor.fetchall()
+        except Exception as e:
+            logger.error(f"Database error fetching all rows: {e}")
+            raise
+    
+    @with_connection
+    async def fetch_value(self, conn: aiosqlite.Connection, query: str, params: tuple = ()) -> Any:
+        """Fetch a single value from the database"""
+        try:
+            async with conn.execute(query, params) as cursor:
+                row = await cursor.fetchone()
+                return row[0] if row else None
+        except Exception as e:
+            logger.error(f"Database error fetching value: {e}")
+            raise
+    
+    @with_connection
+    async def table_exists(self, conn: aiosqlite.Connection, table_name: str) -> bool:
+        """Check if a table exists"""
+        query = """
+        SELECT name FROM sqlite_master 
+        WHERE type='table' AND name=?
+        """
+        result = await self.fetch_one(conn, query, (table_name,))
+        return result is not None
+    
+    @with_connection
+    async def get_table_columns(self, conn: aiosqlite.Connection, table_name: str) -> List[str]:
+        """Get column names for a table"""
+        query = f"PRAGMA table_info({table_name})"
+        columns = await self.fetch_all(conn, query)
+        return [col[1] for col in columns]
+    
+    @with_connection
+    async def begin_transaction(self, conn: aiosqlite.Connection) -> None:
+        """Begin a transaction"""
+        await conn.execute("BEGIN TRANSACTION")
+    
+    @with_connection
+    async def commit_transaction(self, conn: aiosqlite.Connection) -> None:
+        """Commit a transaction"""
+        await conn.commit()
+    
+    @with_connection
+    async def rollback_transaction(self, conn: aiosqlite.Connection) -> None:
+        """Rollback a transaction"""
+        await conn.rollback()
+    
+    @with_connection
+    async def vacuum(self, conn: aiosqlite.Connection) -> None:
+        """Vacuum the database to optimize storage"""
+        try:
+            await conn.execute("VACUUM")
+            logger.info("Database vacuum completed successfully")
+        except Exception as e:
+            logger.error(f"Error during database vacuum: {e}")
+            raise
+
     async def initialize(self):
         """Initialize database and run migrations"""
         try:
