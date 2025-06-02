@@ -11,7 +11,7 @@ import json
 import bcrypt
 from pathlib import Path
 
-from config import DB_FILE, DB_TIMEOUT, DB_BACKUP_DIR, DB_POOL_SIZE, DB_MIGRATIONS_DIR
+from config import DB_FILE, DB_POOL_TIMEOUT, DB_BACKUP_DIR, DB_POOL_SIZE, DB_MIGRATIONS_DIR
 from utils.db_pool import db_pool, with_connection
 from utils.resource_manager import log_execution_time
 
@@ -77,7 +77,7 @@ class DatabasePool:
                 for _ in range(self.pool_size):
                     conn = await aiosqlite.connect(
                         DB_FILE,
-                        timeout=DB_TIMEOUT,
+                        timeout=DB_POOL_TIMEOUT,
                         isolation_level=None  # Enable autocommit mode
                     )
                     conn.row_factory = aiosqlite.Row
