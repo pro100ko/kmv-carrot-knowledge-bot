@@ -33,6 +33,7 @@ from middleware import (
 )
 from monitoring.metrics import metrics_collector
 from utils.error_handling import handle_errors, log_operation
+from utils.resource_manager import resource_manager
 
 # Configure logging
 logging.basicConfig(
@@ -56,6 +57,10 @@ webhook_handler: Optional[SimpleRequestHandler] = None
 async def on_startup() -> None:
     """Initialize application on startup."""
     logger.info("Starting up application...")
+    
+    # Initialize resource manager
+    await resource_manager.initialize()
+    logger.info("Resource manager initialized")
     
     # Start metrics collection if enabled
     if ENABLE_METRICS:
@@ -118,6 +123,10 @@ async def on_shutdown() -> None:
     if webhook_handler:
         await webhook_handler.shutdown()
         logger.info("Webhook server stopped")
+    
+    # Cleanup resources
+    await resource_manager.cleanup()
+    logger.info("Resource cleanup completed")
     
     # Close bot session
     await bot.session.close()

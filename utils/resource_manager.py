@@ -5,7 +5,7 @@ import signal
 import sys
 import logging
 import asyncio
-from typing import List, Callable, Any, Dict
+from typing import List, Callable, Any, Dict, Optional
 from functools import wraps
 import time
 import psutil
@@ -23,33 +23,65 @@ class ResourceManager:
         self._start_time = time.time()
         self._memory_limit = int(os.getenv("MAX_MEMORY_USAGE", "512")) * 1024 * 1024  # Convert MB to bytes
         self._memory_warning_threshold = 0.8  # 80% of limit
+        self._monitoring_task: Optional[asyncio.Task] = None
         
         # Register cleanup handlers
         atexit.register(self.cleanup)
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT, self._handle_signal)
+    
+    async def initialize(self) -> None:
+        """Initialize resource manager asynchronously.
         
-        # Start memory monitoring
-        self._start_memory_monitoring()
+        This method should be called after the event loop is running.
+        """
+        if self._monitoring_task is None:
+            self._start_memory_monitoring()
+            logger.info("Resource manager initialized")
     
     def register_cleanup(self, handler: Callable[[], None]) -> None:
         """Register a cleanup handler"""
         self._cleanup_handlers.append(handler)
     
-    def cleanup(self) -> None:
+    async def cleanup(self) -> None:
         """Execute all cleanup handlers in reverse order"""
         logger.info("Starting cleanup...")
+        
+        # Cancel monitoring task if running
+        if self._monitoring_task and not self._monitoring_task.done():
+            self._monitoring_task.cancel()
+            try:
+                await self._monitoring_task
+            except asyncio.CancelledError:
+                pass
+            self._monitoring_task = None
+        
+        # Execute cleanup handlers
         for handler in reversed(self._cleanup_handlers):
             try:
-                handler()
+                if asyncio.iscoroutinefunction(handler):
+                    await handler()
+                else:
+                    handler()
             except Exception as e:
                 logger.error(f"Cleanup error in {handler.__name__}: {e}")
+        
         logger.info("Cleanup completed")
     
     def _handle_signal(self, signum: int, frame: Any) -> None:
         """Handle termination signals"""
         logger.info(f"Received signal {signum}, starting cleanup...")
-        self.cleanup()
+        # Create event loop if needed and run cleanup
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        try:
+            loop.run_until_complete(self.cleanup())
+        finally:
+            loop.close()
         sys.exit(0)
     
     def _start_memory_monitoring(self) -> None:
@@ -88,7 +120,8 @@ class ResourceManager:
                 await asyncio.sleep(60)  # Check every minute
         
         # Start monitoring in background
-        asyncio.create_task(monitor_memory())
+        self._monitoring_task = asyncio.create_task(monitor_memory())
+        logger.info("Memory monitoring started")
 
 def log_execution_time(logger: logging.Logger) -> Callable:
     """Decorator to log function execution time"""
