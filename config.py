@@ -10,6 +10,9 @@ import shutil
 # Load environment variables from .env file
 load_dotenv()
 
+# Base directory
+BASE_DIR: Path = Path(__file__).parent
+
 # Bot settings
 BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
 if not BOT_TOKEN:
@@ -18,6 +21,38 @@ if not BOT_TOKEN:
 # Environment settings
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 IS_PRODUCTION = ENVIRONMENT == "production"
+
+# Directory settings
+DB_DIR: Path = Path(os.getenv("DB_DIR", "data"))
+DB_FILE: Path = DB_DIR / os.getenv("DB_FILE", "morkovka_bot.db")
+DB_BACKUP_DIR: Path = Path(os.getenv("DB_BACKUP_DIR", "backups"))
+DB_MIGRATIONS_DIR: Path = Path(os.getenv("DB_MIGRATIONS_DIR", "migrations"))
+LOG_DIR: Path = Path(os.getenv("LOG_DIR", "logs"))
+METRICS_DIR: Path = Path(os.getenv("METRICS_DIR", "metrics"))
+MEDIA_DIR: Path = Path("media")
+PRODUCT_IMAGE_DIR: Path = MEDIA_DIR / "products"
+CATEGORY_IMAGE_DIR: Path = MEDIA_DIR / "categories"
+TEST_IMAGE_DIR: Path = MEDIA_DIR / "tests"
+USER_IMAGE_DIR: Path = MEDIA_DIR / "users"
+TEMP_DIR: Path = MEDIA_DIR / "temp"
+
+# Create all necessary directories
+REQUIRED_DIRECTORIES = [
+    LOG_DIR,
+    METRICS_DIR,
+    DB_BACKUP_DIR,
+    DB_DIR,
+    MEDIA_DIR,
+    PRODUCT_IMAGE_DIR,
+    CATEGORY_IMAGE_DIR,
+    TEST_IMAGE_DIR,
+    USER_IMAGE_DIR,
+    TEMP_DIR,
+    DB_MIGRATIONS_DIR
+]
+
+for directory in REQUIRED_DIRECTORIES:
+    directory.mkdir(parents=True, exist_ok=True)
 
 # Webhook settings (for production)
 WEBHOOK_HOST = os.getenv("WEBHOOK_HOST") or os.getenv("RENDER_EXTERNAL_URL")  # Try both variables
@@ -43,15 +78,11 @@ ADMIN_IDS: List[int] = [
 ]
 
 # Database settings
-DB_DIR = os.getenv("DB_DIR", "data")  # Directory for database files
-DB_FILE: str = os.path.join(DB_DIR, os.getenv("DB_FILE", "morkovka_bot.db"))
-DB_BACKUP_DIR = os.getenv("DB_BACKUP_DIR", "backups")
 DB_BACKUP_KEEP_DAYS = int(os.getenv("DB_BACKUP_KEEP_DAYS", "30"))
 DB_BACKUP_COMPRESS = os.getenv("DB_BACKUP_COMPRESS", "true").lower() == "true"
 DB_BACKUP_SCHEDULE = os.getenv("DB_BACKUP_SCHEDULE", "0 0 * * *")  # Daily at midnight
 DB_BACKUP_MAX_SIZE = int(os.getenv("DB_BACKUP_MAX_SIZE", "100"))  # Maximum backup size in MB
 DB_BACKUP_MIN_FREE_SPACE = int(os.getenv("DB_BACKUP_MIN_FREE_SPACE", "500"))  # Minimum free space in MB
-DB_MIGRATIONS_DIR: str = os.getenv("DB_MIGRATIONS_DIR", "migrations")
 DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "5"))  # Maximum number of concurrent database connections
 DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))  # Connection timeout in seconds
 DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "3600"))  # Connection recycle time in seconds
@@ -59,7 +90,6 @@ DB_POOL_CLEANUP_INTERVAL = int(os.getenv("DB_POOL_CLEANUP_INTERVAL", "300"))  # 
 
 # Logging settings
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-LOG_DIR = os.getenv("LOG_DIR", "logs")
 LOG_KEEP_DAYS = int(os.getenv("LOG_KEEP_DAYS", "30"))
 
 # Test settings
@@ -120,24 +150,13 @@ SESSION_TIMEOUT_MINUTES: int = int(os.getenv("SESSION_TIMEOUT_MINUTES", "30"))
 MIN_SEARCH_LENGTH: int = 3  # Minimum length of search query
 MAX_SEARCH_RESULTS: int = 10  # Maximum number of search results to show
 
-# File paths
-BASE_DIR: Path = Path(__file__).parent
-IMAGE_DIR: Path = BASE_DIR / "images"
-PRODUCT_IMAGE_DIR: Path = IMAGE_DIR / "products"
-CATEGORY_IMAGE_DIR: Path = IMAGE_DIR / "categories"
-
 # Monitoring settings
-METRICS_DIR = os.getenv("METRICS_DIR", "metrics")
 METRICS_RETENTION_DAYS = int(os.getenv("METRICS_RETENTION_DAYS", "7"))
 MAX_MEMORY_USAGE_MB = int(os.getenv("MAX_MEMORY_USAGE_MB", "512"))  # 512MB limit for Render free tier
 MAX_CPU_USAGE_PERCENT = int(os.getenv("MAX_CPU_USAGE_PERCENT", "80"))
 ENABLE_METRICS = os.getenv("ENABLE_METRICS", "true").lower() == "true"
 METRICS_COLLECTION_INTERVAL = int(os.getenv("METRICS_COLLECTION_INTERVAL", "60"))  # seconds
 METRICS_CLEANUP_INTERVAL = int(os.getenv("METRICS_CLEANUP_INTERVAL", "3600"))  # seconds
-
-# Create necessary directories
-for directory in [LOG_DIR, IMAGE_DIR, PRODUCT_IMAGE_DIR, CATEGORY_IMAGE_DIR, Path(DB_BACKUP_DIR), Path(DB_MIGRATIONS_DIR)]:
-    directory.mkdir(parents=True, exist_ok=True)
 
 def validate_config() -> None:
     """Validate configuration settings"""
@@ -222,27 +241,15 @@ def validate_config() -> None:
     if DB_BACKUP_MIN_FREE_SPACE < 100:
         raise ValueError("DB_BACKUP_MIN_FREE_SPACE must be at least 100MB")
     
-    # Create necessary directories
-    os.makedirs(DB_DIR, exist_ok=True)
-    os.makedirs(DB_BACKUP_DIR, exist_ok=True)
-    os.makedirs(LOG_DIR, exist_ok=True)
-    
-    # Ensure database file directory exists
-    db_dir = os.path.dirname(DB_FILE)
-    if db_dir:  # Only create if there's a directory path
-        os.makedirs(db_dir, exist_ok=True)
-
-    # Create metrics directory
-    os.makedirs(METRICS_DIR, exist_ok=True)
-
     # Check free space
-    backup_dir = Path(DB_BACKUP_DIR)
-    free_space = shutil.disk_usage(backup_dir).free / (1024 * 1024)  # Convert to MB
-    if free_space < DB_BACKUP_MIN_FREE_SPACE:
-        logger.warning(
-            f"Low disk space for backups: {free_space:.1f}MB free "
-            f"(minimum required: {DB_BACKUP_MIN_FREE_SPACE}MB)"
-        )
+    if DB_BACKUP_DIR.exists():
+        free_space_mb = shutil.disk_usage(DB_BACKUP_DIR).free / (1024 * 1024)
+        if free_space_mb < DB_BACKUP_MIN_FREE_SPACE:
+            raise ValueError(
+                f"Insufficient free space for backups. "
+                f"Required: {DB_BACKUP_MIN_FREE_SPACE}MB, "
+                f"Available: {free_space_mb:.1f}MB"
+            )
 
 # Validate configuration on import
 validate_config()
