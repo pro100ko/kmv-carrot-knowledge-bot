@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 import re
 from enum import Enum
+import logging
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, User
@@ -26,6 +27,9 @@ from admin_panel import (
     AdminUserCallback,
     truncate_message
 )
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 # Create router for user management
 router = Router()
@@ -568,4 +572,8 @@ async def search_user_command(message: Message) -> None:
         await message.answer(
             format_error_message(e),
             parse_mode="HTML"
-        ) 
+        )
+
+def setup_user_handlers(dp: Router):
+    """Setup user management handlers"""
+    dp.include_router(router) 

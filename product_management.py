@@ -14,7 +14,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from config import (
     MAX_PRODUCT_IMAGES,
     MAX_MESSAGE_LENGTH,
-    MAX_CAPTION_LENGTH
+    MAX_CAPTION_LENGTH,
+    ADMIN_IDS
 )
 from logging_config import admin_logger
 from sqlite_db import db
@@ -626,4 +627,171 @@ async def search_product_command(message: Message) -> None:
         await message.answer(
             format_error_message(e),
             parse_mode="HTML"
-        ) 
+        )
+
+# Admin commands
+@router.message(Command("add_product"))
+async def cmd_add_product(message: Message, state: FSMContext):
+    """Start product creation process"""
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⚠️ У вас нет прав для выполнения этой команды.")
+        return
+    
+    # Get categories for selection
+    categories = db.get_categories(include_inactive=False)
+    if not categories:
+        await message.answer(
+            "⚠️ Сначала создайте хотя бы одну категорию.\n"
+            "Используйте команду /add_category"
+        )
+        return
+    
+    # Create keyboard with categories
+    builder = InlineKeyboardBuilder()
+    for category in categories:
+        builder.button(
+            text=category['name'],
+            callback_data=f"product_add:{category['id']}"
+        )
+    
+    builder.adjust(1)  # One button per row
+    
+    await message.answer(
+        "➕ <b>Добавление нового продукта</b>\n\n"
+        "Выберите категорию для продукта:",
+        reply_markup=builder.as_markup()
+    )
+
+@router.callback_query(F.data.startswith("product_add:"))
+async def process_product_add(callback: CallbackQuery, state: FSMContext):
+    """Start product creation for selected category"""
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("У вас нет прав для выполнения этой команды")
+        return
+    
+    category_id = int(callback.data.split(":")[1])
+    await state.update_data(category_id=category_id)
+    await state.set_state(ProductForm.name)
+    
+    await callback.message.edit_text(
+        "Введите название продукта:"
+    )
+
+@router.message(ProductForm.name)
+async def process_product_name(message: Message, state: FSMContext):
+    """Process product name"""
+    if not message.text.strip():
+        await message.answer("⚠️ Название не может быть пустым")
+        return
+    
+    await state.update_data(name=message.text.strip())
+    await state.set_state(ProductForm.description)
+    
+    await message.answer(
+        "Введите описание продукта:"
+    )
+
+@router.message(ProductForm.description)
+async def process_product_description(message: Message, state: FSMContext):
+    """Process product description"""
+    await state.update_data(description=message.text.strip())
+    await state.set_state(ProductForm.price)
+    
+    await message.answer(
+        "Введите информацию о цене:"
+    )
+
+@router.message(ProductForm.price)
+async def process_product_price(message: Message, state: FSMContext):
+    """Process product price info"""
+    await state.update_data(price_info=message.text.strip())
+    await state.set_state(ProductForm.images)
+    
+    await message.answer(
+        "Введите условия хранения:"
+    )
+
+@router.message(ProductForm.images)
+async def process_product_images(message: Message, state: FSMContext):
+    """Process product images"""
+    try:
+        # Get saved data
+        data = await state.get_data()
+        
+        # Handle images or skip
+        if message.text == "-":
+            images_data = []
+        elif message.photo:
+            # Get the largest photo
+            photo = message.photo[-1]
+            images_data = [{
+                "file_id": photo.file_id,
+                "file_unique_id": photo.file_unique_id,
+                "width": photo.width,
+                "height": photo.height,
+                "file_size": photo.file_size
+            }]
+        else:
+            await message.answer(
+                format_admin_message(
+                    title="❌ Ошибка",
+                    content="Пожалуйста, отправьте изображение или '-' для пропуска."
+                )
+            )
+            return
+        
+        # Create product
+        product_data = {
+            "category_id": data["category_id"],
+            "name": data["name"],
+            "description": data["description"],
+            "price_info": data["price"],
+            "images": images_data,
+            "created_by": message.from_user.id,
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+            "is_active": True
+        }
+        
+        product_id = db.add_product(product_data)
+        
+        # Send success message
+        product = db.get_product(product_id)
+        text = format_admin_message(
+            title="✅ Товар создан",
+            content=format_product_message(product)
+        )
+        keyboard = get_product_keyboard(product_id)
+        
+        # Send images if available
+        if images_data:
+            media = MediaGroup()
+            for i, image in enumerate(images_data):
+                if i == 0:
+                    # First image with caption
+                    media.attach_photo(
+                        image['file_id'],
+                        caption=text,
+                        parse_mode="HTML"
+                    )
+                else:
+                    # Other images without caption
+                    media.attach_photo(image['file_id'])
+            
+            await message.answer_media_group(media)
+        else:
+            await message.answer(text, reply_markup=keyboard)
+        
+        await state.clear()
+        
+    except Exception as e:
+        admin_logger.error(f"Error in process product images: {e}")
+        await message.answer(
+            format_error_message(e),
+            parse_mode="HTML"
+        )
+        await state.clear()
+
+def setup_product_handlers(dp: Router):
+    """Setup product management handlers"""
+    dp.include_router(router) 

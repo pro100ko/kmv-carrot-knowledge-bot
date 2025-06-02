@@ -55,7 +55,7 @@ class Database:
         """Initialize database connection"""
         if self._initialized:
             return
-            
+        
         self._initialized = True
         self.conn = None
         self._connection_attempts = 0
