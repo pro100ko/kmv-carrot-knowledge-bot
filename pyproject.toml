@@ -8,7 +8,13 @@ version = "1.0.0"
 description = "Telegram bot for managing product knowledge and testing"
 authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
-packages = [{include = "."}]
+packages = [
+    {include = "."},
+    {include = "monitoring"},
+    {include = "utils"},
+    {include = "handlers"},
+    {include = "middleware"}
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"
