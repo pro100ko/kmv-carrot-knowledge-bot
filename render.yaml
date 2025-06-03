@@ -8,11 +8,8 @@ services:
       paths:
         - requirements.txt
         - setup.py
-    buildCommand: |
-      set -e
-      python -m pip install --upgrade pip
-      pip install -e .
-      pip install -r requirements.txt
+        - build.sh
+    buildCommand: ./build.sh
     startCommand: |
       if [ "$ENVIRONMENT" = "production" ]; then
         PYTHONPATH=/opt/render/project/src gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
