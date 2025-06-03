@@ -213,12 +213,18 @@ logger.info(f"Binding to port: {WEBAPP_PORT}")
 
 if __name__ == "__main__":
     # Start the application
-    web.run_app(
-        app,
-        host="0.0.0.0",
-        port=WEBAPP_PORT,
-        ssl_context={
-            'cert': WEBHOOK_SSL_CERT,
-            'key': WEBHOOK_SSL_PRIV
-        } if WEBHOOK_SSL_CERT and WEBHOOK_SSL_PRIV else None
-    )
+    loop = asyncio.get_event_loop()
+    
+    try:
+        loop.run_until_complete(on_startup())
+        web.run_app(
+            app,
+            host="0.0.0.0",
+            port=WEBAPP_PORT,
+            ssl_context={
+                'cert': WEBHOOK_SSL_CERT,
+                'key': WEBHOOK_SSL_PRIV
+            } if WEBHOOK_SSL_CERT and WEBHOOK_SSL_PRIV else None
+        )
+    finally:
+        loop.run_until_complete(on_shutdown())
