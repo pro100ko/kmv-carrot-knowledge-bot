@@ -22,7 +22,8 @@ from config import (
     WEBHOOK_SSL_PRIV,
     ENABLE_WEBHOOK,
     ENABLE_METRICS,
-    LOG_LEVEL
+    LOG_LEVEL,
+    WEBHOOK_URL
 )
 from middleware import (
     metrics_middleware,
@@ -56,6 +57,32 @@ app = web.Application()
 
 # Store webhook handler for cleanup
 webhook_handler: Optional[SimpleRequestHandler] = None
+
+async def setup_webhook(bot: Bot) -> None:
+    """Configure webhook for the bot."""
+    if not WEBHOOK_URL:
+        logger.error("WEBHOOK_URL is not set. Cannot configure webhook.")
+        return
+
+    try:
+        # Remove any existing webhook
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Deleted existing webhook")
+
+        # Set new webhook
+        await bot.set_webhook(
+            url=WEBHOOK_URL,
+            allowed_updates=["message", "callback_query", "inline_query"],
+            drop_pending_updates=True
+        )
+        logger.info(f"Webhook set to {WEBHOOK_URL}")
+
+        # Verify webhook
+        webhook_info = await bot.get_webhook_info()
+        logger.info(f"Webhook info: {webhook_info}")
+    except Exception as e:
+        logger.error(f"Failed to setup webhook: {e}")
+        raise
 
 @handle_errors
 @log_operation
@@ -98,6 +125,13 @@ async def on_startup() -> None:
     
     # Setup webhook if enabled
     if ENABLE_WEBHOOK:
+        if not WEBHOOK_URL:
+            raise ValueError("WEBHOOK_URL is required when webhook mode is enabled")
+            
+        # Configure webhook in Telegram
+        await setup_webhook(bot)
+        
+        # Setup webhook handler
         global webhook_handler
         webhook_handler = SimpleRequestHandler(
             dispatcher=dp,
@@ -105,9 +139,10 @@ async def on_startup() -> None:
             handle_signals=False
         )
         
+        # Register webhook handler with the correct path
         webhook_handler.register(app, path=WEBHOOK_PATH)
         setup_application(app, dp, bot=bot)
-        logger.info(f"Webhook server configured at {WEBHOOK_HOST}{WEBHOOK_PATH}")
+        logger.info(f"Webhook server configured at {WEBHOOK_URL}")
     else:
         # Start polling
         await dp.start_polling(bot)
