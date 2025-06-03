@@ -9,12 +9,16 @@ services:
         - requirements.txt
         - setup.py
         - build.sh
-    buildCommand: ./build.sh
+        - monitoring/**/*
+    buildCommand: |
+      chmod +x build.sh
+      ./build.sh
     startCommand: |
+      export PYTHONPATH=/opt/render/project/src
       if [ "$ENVIRONMENT" = "production" ]; then
-        PYTHONPATH=/opt/render/project/src gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+        gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
       else
-        PYTHONPATH=/opt/render/project/src python -m main
+        python -m main
       fi
     healthCheckPath: /health
     autoDeploy: true
