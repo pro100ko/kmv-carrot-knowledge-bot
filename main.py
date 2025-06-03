@@ -23,7 +23,9 @@ from config import (
     ENABLE_WEBHOOK,
     ENABLE_METRICS,
     LOG_LEVEL,
-    WEBHOOK_URL
+    WEBHOOK_URL,
+    ENVIRONMENT,
+    IS_PRODUCTION
 )
 from middleware import (
     metrics_middleware,
@@ -44,6 +46,8 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+logger.info(f"Environment: {ENVIRONMENT}, IS_PRODUCTION: {IS_PRODUCTION}")
 
 # Initialize bot and dispatcher
 bot = Bot(
@@ -94,6 +98,8 @@ async def on_startup() -> None:
     await resource_manager.initialize()
     logger.info("Resource manager initialized")
     
+    logger.info(f"ENABLE_WEBHOOK: {ENABLE_WEBHOOK}")
+    
     # Start metrics collection if enabled
     if ENABLE_METRICS:
         metrics_collector.start()
@@ -128,8 +134,12 @@ async def on_startup() -> None:
         if not WEBHOOK_URL:
             raise ValueError("WEBHOOK_URL is required when webhook mode is enabled")
             
+        logger.info(f"Attempting to setup webhook with URL: {WEBHOOK_URL}")
+        
         # Configure webhook in Telegram
         await setup_webhook(bot)
+        
+        logger.info("Webhook setup function called.")
         
         # Setup webhook handler
         global webhook_handler
