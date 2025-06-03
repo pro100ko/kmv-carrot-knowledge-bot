@@ -201,37 +201,12 @@ async def health_check(request: web.Request) -> web.Response:
             status=500
         )
 
-def handle_exception(loop: asyncio.AbstractEventLoop, context: dict) -> None:
-    """Handle uncaught exceptions."""
-    msg = context.get("exception", context["message"])
-    logger.error(f"Uncaught exception: {msg}", exc_info=context.get("exception"))
-    
-    # Record error in metrics if enabled
-    if ENABLE_METRICS:
-        metrics_collector.increment_error_count("uncaught_exception")
-
 # Add health check endpoint
 app.router.add_get("/health", health_check)
 
 # Setup startup and shutdown handlers
 app.on_startup.append(on_startup)
 app.on_shutdown.append(on_shutdown)
-
-# Setup exception handler
-try:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-except RuntimeError:
-    loop = asyncio.get_running_loop()
-
-loop.set_exception_handler(handle_exception)
-
-# Add signal handlers
-for sig in (signal.SIGTERM, signal.SIGINT):
-    loop.add_signal_handler(
-        sig,
-        lambda: asyncio.create_task(on_shutdown())
-    )
 
 logger.info("Starting aiohttp web application...")
 logger.info(f"Binding to port: {WEBAPP_PORT}")
