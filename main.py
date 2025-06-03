@@ -88,8 +88,6 @@ async def setup_webhook(bot: Bot) -> None:
         logger.error(f"Failed to setup webhook: {e}")
         raise
 
-@handle_errors
-@log_operation
 async def on_startup() -> None:
     """Initialize application on startup."""
     logger.info("Entering on_startup function.")
@@ -159,8 +157,6 @@ async def on_startup() -> None:
         await dp.start_polling(bot)
         logger.info("Bot started in polling mode")
 
-@handle_errors
-@log_operation
 async def on_shutdown() -> None:
     """Cleanup on shutdown."""
     logger.info("Shutting down application...")
@@ -216,7 +212,9 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     
     try:
+        logger.info("Running on_startup...")
         loop.run_until_complete(on_startup())
+        logger.info("on_startup finished.")
         web.run_app(
             app,
             host="0.0.0.0",
@@ -227,4 +225,6 @@ if __name__ == "__main__":
             } if WEBHOOK_SSL_CERT and WEBHOOK_SSL_PRIV else None
         )
     finally:
+        logger.info("Running on_shutdown...")
         loop.run_until_complete(on_shutdown())
+        logger.info("on_shutdown finished.")
