@@ -1,11 +1,14 @@
 """Error handling utilities for the bot."""
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable, Awaitable, Union, TypeVar
 import logging
+import inspect
 from functools import wraps
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar('T')
 
 class BotError(Exception):
     """Base exception for bot errors."""
@@ -38,12 +41,17 @@ class StateError(BotError):
     """State management error."""
     pass
 
-def handle_errors(func):
-    """Decorator for handling errors in handlers."""
+def handle_errors(func: Callable[..., Union[T, Awaitable[T]]]) -> Callable[..., Awaitable[T]]:
+    """Decorator for handling errors in handlers.
+    
+    Works with both coroutine and non-coroutine functions.
+    """
     @wraps(func)
-    async def wrapper(*args, **kwargs):
+    async def wrapper(*args, **kwargs) -> T:
         try:
-            return await func(*args, **kwargs)
+            if inspect.iscoroutinefunction(func):
+                return await func(*args, **kwargs)
+            return func(*args, **kwargs)
         except TelegramAPIError as e:
             logger.error(f"Telegram API error in {func.__name__}: {e}")
             # Handle rate limits and other Telegram-specific errors

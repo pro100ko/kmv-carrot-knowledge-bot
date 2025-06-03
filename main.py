@@ -4,7 +4,8 @@ import asyncio
 import logging
 import signal
 import sys
-from typing import Optional
+from typing import Optional, Callable, Any, Awaitable
+from functools import wraps
 
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
@@ -171,7 +172,12 @@ app.on_startup.append(on_startup)
 app.on_shutdown.append(on_shutdown)
 
 # Setup exception handler
-loop = asyncio.get_event_loop()
+try:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+except RuntimeError:
+    loop = asyncio.get_running_loop()
+
 loop.set_exception_handler(handle_exception)
 
 # Add signal handlers
