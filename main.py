@@ -92,6 +92,7 @@ async def setup_webhook(bot: Bot) -> None:
 @log_operation
 async def on_startup() -> None:
     """Initialize application on startup."""
+    logger.info("Entering on_startup function.")
     logger.info("Starting up application...")
     
     # Initialize resource manager
