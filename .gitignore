@@ -102,7 +102,11 @@ site/
 
 # Metrics and monitoring
 metrics/
-monitoring/
+# Allow monitoring package but ignore metrics data
+monitoring/*.json
+monitoring/*.csv
+monitoring/*.log
+monitoring/data/
 
 # Temporary files
 *.tmp
