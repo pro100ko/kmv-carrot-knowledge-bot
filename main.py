@@ -233,6 +233,7 @@ for sig in (signal.SIGTERM, signal.SIGINT):
     )
 
 logger.info("Starting aiohttp web application...")
+logger.info(f"Binding to port: {WEBAPP_PORT}")
 
 if __name__ == "__main__":
     # Start the application
