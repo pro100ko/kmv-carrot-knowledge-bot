@@ -6,20 +6,16 @@ services:
     plan: free
     buildFilter:
       paths:
-        - pyproject.toml
-        - poetry.lock
+        - requirements.txt
     buildCommand: |
       set -e
       python -m pip install --upgrade pip
-      pip install poetry==1.7.1
-      poetry config virtualenvs.create false
-      poetry install --no-interaction --no-ansi --no-root
-      poetry install --no-interaction --no-ansi
+      pip install -r requirements.txt
     startCommand: |
       if [ "$ENVIRONMENT" = "production" ]; then
-        poetry run gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+        gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
       else
-        poetry run python -m main
+        python -m main
       fi
     healthCheckPath: /health
     autoDeploy: true
