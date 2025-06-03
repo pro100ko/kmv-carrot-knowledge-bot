@@ -232,6 +232,8 @@ for sig in (signal.SIGTERM, signal.SIGINT):
         lambda: asyncio.create_task(on_shutdown())
     )
 
+logger.info("Starting aiohttp web application...")
+
 if __name__ == "__main__":
     # Start the application
     web.run_app(
