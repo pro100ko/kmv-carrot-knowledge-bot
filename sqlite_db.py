@@ -131,9 +131,13 @@ class Database:
     
     def __init__(self):
         """Initialize database connection"""
-        self._pool = db_pool
-        self._initialized = True
+        self._pool = None # Will be set later
+        self._initialized = False
         
+    def set_pool(self, pool):
+        """Set the database pool instance."""
+        self._pool = pool
+
     @with_connection
     async def execute(self, conn: aiosqlite.Connection, query: str, params: tuple = ()) -> None:
         """Execute a query without returning results"""
@@ -676,3 +680,8 @@ if __name__ == '__main__':
             logger.error("Database integrity check failed")
     except Exception as e:
         logger.error(f"Database test failed: {e}")
+
+# Initialization function to be called from main.py
+def initialize(pool):
+    """Initialize the database module with the pool."""
+    db.set_pool(pool)

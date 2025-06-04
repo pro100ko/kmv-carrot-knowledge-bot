@@ -116,10 +116,14 @@ async def on_startup(runner_instance: Any) -> None:
     # globals()['db_pool'] = new_db_pool # Redundant if using app context, but kept for safety based on past errors
 
     # Add metrics_collector to globals for health check and shutdown access
-    globals()['metrics_collector'] = metrics_collector
+    # globals()['metrics_collector'] = metrics_collector
 
-    # Store metrics_collector in aiohttp app context for reliable handler access
+    # Store metrics_collector and db_pool in aiohttp app context for reliable handler access
     runner_instance['metrics_collector'] = metrics_collector
+    runner_instance['db_pool'] = new_db_pool # Ensure db_pool is also in context
+
+    # Create and store health check handler with metrics_collector injected
+    runner_instance['health_check_handler'] = create_health_check_handler(metrics_collector)
 
     # Initialize resource manager
     await resource_manager.initialize()
@@ -231,30 +235,35 @@ def handle_exception(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -
     if not loop.is_closed():
         loop.create_task(on_shutdown(None))
 
-async def health_check(request: web.Request) -> web.Response:
-    """Health check endpoint."""
-    try:
-        # Get metrics if enabled
-        if config.ENABLE_METRICS:
-            # Retrieve metrics_collector from app context
-            metrics_collector_instance = request.app.get('metrics_collector')
-            # Access metrics_collector directly after retrieving from context
-            metrics = metrics_collector_instance.get_metrics()
-            
-            return web.json_response({
-                "status": "healthy",
-                "metrics": metrics
-            })
-        return web.json_response({"status": "healthy"})
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return web.json_response(
-            {"status": "unhealthy", "error": str(e)},
-            status=500
-        )
+def create_health_check_handler(metrics_collector_instance):
+    """Factory to create a health check handler with metrics_collector injected."""
+    async def health_check(request: web.Request) -> web.Response:
+        """Health check endpoint."""
+        try:
+            # Get metrics if enabled
+            if config.ENABLE_METRICS:
+                # Access metrics_collector instance passed via closure
+                if metrics_collector_instance:
+                    metrics = metrics_collector_instance.get_metrics()
+                else:
+                    logger.error("Metrics collector instance not available in health check handler.")
+                    metrics = {"error": "Metrics collector not available"}
 
-# Add health check endpoint
-app.router.add_get("/health", health_check)
+                return web.json_response({
+                    "status": "healthy",
+                    "metrics": metrics
+                })
+            return web.json_response({"status": "healthy"})
+        except Exception as e:
+            logger.error(f"Health check failed: {e}")
+            return web.json_response(
+                {"status": "unhealthy", "error": str(e)},
+                status=500
+            )
+    return health_check
+
+# Add health check endpoint - will be set in on_startup now
+# app.router.add_get("/health", health_check) # REMOVED: Router setup moved to on_startup
 
 # Setup startup and shutdown handlers
 app.on_startup.append(on_startup)
