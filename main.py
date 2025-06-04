@@ -108,6 +108,9 @@ async def on_startup() -> None:
     # Add db_pool to globals to ensure it's available in shutdown
     globals()['db_pool'] = db_pool
 
+    # Add metrics_collector to globals for health check and shutdown access
+    globals()['metrics_collector'] = metrics_collector
+
     # Initialize resource manager
     await resource_manager.initialize()
     logger.info("Resource manager initialized")
