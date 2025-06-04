@@ -4,6 +4,8 @@ import asyncio
 import logging
 import signal
 import sys
+import os
+from dotenv import load_dotenv
 from typing import Optional, Callable, Any, Awaitable, Dict
 from functools import wraps
 
@@ -68,6 +70,8 @@ app = web.Application()
 # Store webhook handler for cleanup
 webhook_handler: Optional[SimpleRequestHandler] = None
 
+load_dotenv() # Load environment variables from .env file
+
 async def setup_webhook(bot: Bot) -> None:
     """Configure webhook for the bot."""
     if not WEBHOOK_URL:
@@ -99,6 +103,9 @@ async def on_startup() -> None:
     logger.info("Entering on_startup function.")
     logger.info("Starting up application...")
     
+    # Add db_pool to globals to ensure it's available in shutdown
+    globals()['db_pool'] = db_pool
+
     # Initialize resource manager
     await resource_manager.initialize()
     logger.info("Resource manager initialized")
