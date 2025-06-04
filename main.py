@@ -111,6 +111,9 @@ async def on_startup(runner_instance: Any) -> None:
     # Add metrics_collector to globals for health check and shutdown access
     globals()['metrics_collector'] = metrics_collector
 
+    # Store metrics_collector in aiohttp app context for reliable handler access
+    runner_instance['metrics_collector'] = metrics_collector
+
     # Initialize resource manager
     await resource_manager.initialize()
     logger.info("Resource manager initialized")
@@ -222,7 +225,15 @@ async def health_check(request: web.Request) -> web.Response:
     try:
         # Get metrics if enabled
         if config.ENABLE_METRICS:
-            metrics = metrics_collector.get_metrics()
+            # Retrieve metrics_collector from app context
+            metrics_collector_instance = request.app.get('metrics_collector')
+            if metrics_collector_instance:
+                 metrics = metrics_collector_instance.get_metrics()
+            else:
+                 # Fallback or error if metrics_collector not found in context
+                 logger.error("Metrics collector not found in app context during health check.")
+                 metrics = {"error": "Metrics collector not available"}
+
             return web.json_response({
                 "status": "healthy",
                 "metrics": metrics
