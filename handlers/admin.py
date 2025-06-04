@@ -14,9 +14,8 @@ from utils.keyboards import (
     get_admin_keyboard, get_admin_categories_keyboard,
     get_admin_products_keyboard, get_admin_products_list_keyboard,
     get_admin_tests_keyboard, get_admin_stats_keyboard,
-    get_cancel_keyboard, get_confirmation_keyboard,
+    get_cancel_keyboard, get_confirm_keyboard,
     get_admin_control_keyboard,
-    get_confirm_keyboard,
     get_back_keyboard,
     get_pagination_keyboard
 )
@@ -262,7 +261,7 @@ async def admin_category_delete_handler(
         await safe_edit_message(
             message=query.message,
             text=f"⚠️ Подтверждение удаления\n\nВы уверены, что хотите удалить категорию '{category['name']}'?",
-            reply_markup=get_confirmation_keyboard(
+            reply_markup=get_confirm_keyboard(
                 confirm_callback=f"confirm_category_delete:{category_id}",
                 cancel_callback="cancel_category_delete"
             )
@@ -436,7 +435,7 @@ async def admin_product_delete_handler(
         await safe_edit_message(
             message=query.message,
             text=f"⚠️ Подтверждение удаления\n\nВы уверены, что хотите удалить товар '{product['name']}'?",
-            reply_markup=get_confirmation_keyboard(
+            reply_markup=get_confirm_keyboard(
                 confirm_callback=f"confirm_product_delete:{product_id}",
                 cancel_callback="cancel_product_delete"
             )
@@ -547,7 +546,7 @@ async def admin_test_delete_handler(
         await safe_edit_message(
             message=query.message,
             text=f"⚠️ Подтверждение удаления\n\nВы уверены, что хотите удалить тест '{test['title']}'?",
-            reply_markup=get_confirmation_keyboard(
+            reply_markup=get_confirm_keyboard(
                 confirm_callback=f"confirm_test_delete:{test_id}",
                 cancel_callback="cancel_test_delete"
             )
