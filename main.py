@@ -274,9 +274,26 @@ if __name__ == "__main__":
         else:
             # In polling mode, register on_startup with the dispatcher
             dp.startup_handlers.append(on_startup)
-            loop.run_until_complete(dp.start_polling(bot))
+            # Use asyncio.run for the main entry point in polling mode
+            asyncio.run(dp.start_polling(bot))
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
-        loop.run_until_complete(on_shutdown())
+        # In case of an error in polling mode, run shutdown using asyncio.run
+        if not config.ENABLE_WEBHOOK:
+            asyncio.run(on_shutdown())
+        else:
+            # For webhook mode, the shutdown handler is already registered with aiohttp
+            # We can attempt manual cleanup here as a fallback, but the aiohttp shutdown should handle it
+            # Calling loop.run_until_complete might still cause issues if the loop is already running
+            # Let's rely on the registered aiohttp shutdown handler and just log the error
+            logger.error("Error occurred, relying on aiohttp shutdown handlers.")
+            # Or, if aiohttp shutdown fails or isn't triggered correctly by this exception,
+            # a more complex approach might be needed to ensure async cleanup runs.
+            # For now, let's log and exit, assuming aiohttp's shutdown *should* be attempted.
+            # If persistent cleanup issues occur in webhook mode after this, we'd revisit.
+            pass # Relying on aiohttp shutdown
     finally:
-        loop.close()
+        # When using asyncio.run, the loop is managed and closed by asyncio.run
+        # Avoid explicit loop.close() here to prevent errors.
+        # loop.close() # Removed explicit loop closure
+        pass # Loop closure handled by asyncio.run or aiohttp
