@@ -1082,6 +1082,10 @@ async def back_to_admin_panel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await show_admin_panel(callback.message, state)
 
+async def setup_admin_handlers(dispatcher):
+    """Placeholder function to satisfy import requirements."""
+    pass
+
 __all__ = [
     'admin_handler',
     'admin_categories_handler',
@@ -1105,5 +1109,6 @@ __all__ = [
     'manage_tests',
     'view_stats',
     'manage_settings',
-    'back_to_admin_panel'
+    'back_to_admin_panel',
+    'setup_admin_handlers'
 ]
