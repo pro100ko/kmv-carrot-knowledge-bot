@@ -650,6 +650,10 @@ class Database:
             logger.error(f"Database integrity check failed: {e}")
             return False
 
+def build_schemas():
+    """Temporary placeholder to debug build_schemas ImportError"""
+    print("DEBUG: build_schemas was called!")
+
 # Синглтон экземпляр базы данных
 db = Database()
 
