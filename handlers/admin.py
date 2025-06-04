@@ -744,6 +744,13 @@ async def manage_users(callback: CallbackQuery, state: FSMContext):
         return
     
     try:
+        # Get db_pool from bot data
+        db_pool = callback.bot.data.get('db_pool')
+        if not db_pool:
+            logger.error("Database pool not available in handler context.")
+            await callback.answer("😔 Ошибка доступа к базе данных.", show_alert=True)
+            return
+
         # Get user statistics
         total_users = await db_pool.fetchone(
             "SELECT COUNT(*) as count FROM users"
@@ -817,6 +824,13 @@ async def manage_catalog(callback: CallbackQuery, state: FSMContext):
         return
     
     try:
+        # Get db_pool from bot data
+        db_pool = callback.bot.data.get('db_pool')
+        if not db_pool:
+            logger.error("Database pool not available in handler context.")
+            await callback.answer("😔 Ошибка доступа к базе данных.", show_alert=True)
+            return
+
         # Get catalog statistics
         categories_count = await db_pool.fetchone(
             "SELECT COUNT(*) as count FROM categories WHERE is_active = 1"
@@ -882,6 +896,13 @@ async def manage_tests(callback: CallbackQuery, state: FSMContext):
         return
     
     try:
+        # Get db_pool from bot data
+        db_pool = callback.bot.data.get('db_pool')
+        if not db_pool:
+            logger.error("Database pool not available in handler context.")
+            await callback.answer("😔 Ошибка доступа к базе данных.", show_alert=True)
+            return
+
         # Get test statistics
         tests_count = await db_pool.fetchone(
             "SELECT COUNT(*) as count FROM tests WHERE is_active = 1"
@@ -966,6 +987,13 @@ async def view_stats(callback: CallbackQuery, state: FSMContext):
         return
     
     try:
+        # Get db_pool from bot data
+        db_pool = callback.bot.data.get('db_pool')
+        if not db_pool:
+            logger.error("Database pool not available in handler context.")
+            await callback.answer("😔 Ошибка доступа к базе данных.", show_alert=True)
+            return
+
         # Get general statistics
         users_count = await db_pool.fetchone(
             "SELECT COUNT(*) as count FROM users"
