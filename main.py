@@ -171,7 +171,7 @@ async def on_startup(runner_instance: Any) -> None:
         asyncio.run(dp.start_polling(bot))
         logger.info("asyncio.run(dp.start_polling) finished.")
 
-async def on_shutdown() -> None:
+async def on_shutdown(runner_instance: Any) -> None:
     """Cleanup on shutdown."""
     logger.info("Entering on_shutdown function.")
     logger.info("Shutting down application...")
@@ -215,7 +215,7 @@ def handle_exception(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -
     
     # Schedule application shutdown
     if not loop.is_closed():
-        loop.create_task(on_shutdown())
+        loop.create_task(on_shutdown(None))
 
 async def health_check(request: web.Request) -> web.Response:
     """Health check endpoint."""
@@ -265,7 +265,7 @@ if __name__ == "__main__":
         
         # Register signal handlers
         for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, lambda: asyncio.create_task(on_shutdown()))
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(on_shutdown(None)))
         
         # Determine host and port based on environment
         run_host = config.WEBAPP_HOST
@@ -287,11 +287,11 @@ if __name__ == "__main__":
             logger.info("asyncio.run(web.run_app) finished.")
         else:
             # In case of an error in polling mode, run shutdown using asyncio.run
-            asyncio.run(on_shutdown())
+            asyncio.run(on_shutdown(None))
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
         # In case of an error in webhook mode, run shutdown using asyncio.run
-        asyncio.run(on_shutdown())
+        asyncio.run(on_shutdown(None))
     finally:
         # When using asyncio.run, the loop is managed and closed by asyncio.run
         # Avoid explicit loop.close() here to prevent errors.
