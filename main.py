@@ -272,6 +272,8 @@ if __name__ == "__main__":
                 ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None
             )
         else:
+            # In polling mode, register on_startup with the dispatcher
+            dp.startup_handlers.append(on_startup)
             loop.run_until_complete(dp.start_polling(bot))
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
