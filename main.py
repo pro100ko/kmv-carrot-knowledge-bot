@@ -100,7 +100,7 @@ async def setup_webhook(bot: Bot) -> None:
         logger.error(f"Failed to setup webhook: {e}")
         raise
 
-async def on_startup() -> None:
+async def on_startup(runner_instance: Any) -> None:
     """Initialize application on startup."""
     logger.info("Entering on_startup function.")
     logger.info("Starting up application...")
