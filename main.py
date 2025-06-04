@@ -227,13 +227,9 @@ async def health_check(request: web.Request) -> web.Response:
         if config.ENABLE_METRICS:
             # Retrieve metrics_collector from app context
             metrics_collector_instance = request.app.get('metrics_collector')
-            if metrics_collector_instance:
-                 metrics = metrics_collector_instance.get_metrics()
-            else:
-                 # Fallback or error if metrics_collector not found in context
-                 logger.error("Metrics collector not found in app context during health check.")
-                 metrics = {"error": "Metrics collector not available"}
-
+            # Access metrics_collector directly after retrieving from context
+            metrics = metrics_collector_instance.get_metrics()
+            
             return web.json_response({
                 "status": "healthy",
                 "metrics": metrics
