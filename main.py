@@ -40,6 +40,12 @@ from monitoring.metrics import metrics_collector
 from utils.error_handling import handle_errors, log_operation
 from utils.resource_manager import resource_manager
 
+# Import handler setup functions
+from handlers.user import setup_user_handlers
+from handlers.catalog import setup_catalog_handlers
+from handlers.tests import setup_test_handlers
+from handlers.admin import setup_admin_handlers
+
 # Configure logging
 logging.basicConfig(
     level=LOG_LEVEL,
@@ -115,17 +121,10 @@ async def on_startup() -> None:
     logger.info("Middleware registered")
     
     # Register handlers
-    from handlers import (
-        register_user_handlers,
-        register_catalog_handlers,
-        register_test_handlers,
-        register_admin_handlers
-    )
-    
-    register_user_handlers(dp)
-    register_catalog_handlers(dp)
-    register_test_handlers(dp)
-    register_admin_handlers(dp)
+    setup_user_handlers(dp)
+    setup_catalog_handlers(dp)
+    setup_test_handlers(dp)
+    setup_admin_handlers(dp)
     logger.info("Handlers registered")
     
     # Setup webhook if enabled
