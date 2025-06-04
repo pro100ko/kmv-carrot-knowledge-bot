@@ -9,6 +9,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.dispatcher import Dispatcher
 
 from utils.keyboards import (
     get_catalog_keyboard,
@@ -382,4 +383,8 @@ async def back_to_main(callback: CallbackQuery, state: FSMContext):
 async def back_to_catalog(callback: CallbackQuery, state: FSMContext):
     """Return to catalog view."""
     await state.set_state(CatalogStates.browsing_category)
-    await show_catalog(callback.message, state) 
+    await show_catalog(callback.message, state)
+
+def setup_catalog_handlers(dp: Dispatcher) -> None:
+    """Register catalog handlers with the dispatcher."""
+    dp.include_router(router) 
