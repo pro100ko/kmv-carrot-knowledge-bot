@@ -161,12 +161,16 @@ async def on_startup() -> None:
         setup_application(app, dp, bot=bot)
         logger.info(f"Webhook server configured at {config.WEBHOOK_URL}")
     else:
-        # Start polling
-        await dp.start_polling(bot)
-        logger.info("Bot started in polling mode")
+        # In polling mode, register on_startup with the dispatcher
+        dp.startup_handlers.append(on_startup)
+        # Use asyncio.run for the main entry point in polling mode
+        logger.info("Starting bot in polling mode with asyncio.run...")
+        asyncio.run(dp.start_polling(bot))
+        logger.info("asyncio.run(dp.start_polling) finished.")
 
 async def on_shutdown() -> None:
     """Cleanup on shutdown."""
+    logger.info("Entering on_shutdown function.")
     logger.info("Shutting down application...")
     
     try:
@@ -196,6 +200,10 @@ async def on_shutdown() -> None:
         logger.error(f"Error during shutdown: {e}", exc_info=True)
     finally:
         logger.info("Application shutdown completed")
+        # When using asyncio.run, the loop is managed and closed by asyncio.run
+        # Avoid explicit loop.close() here to prevent errors.
+        # loop.close() # Removed explicit loop closure
+        pass # Loop closure handled by asyncio.run or aiohttp
 
 def handle_exception(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -> None:
     """Handle uncaught exceptions in the event loop."""
@@ -266,12 +274,14 @@ if __name__ == "__main__":
         # Run the application
         if config.ENABLE_WEBHOOK:
             # Use asyncio.run for the main entry point in webhook mode
+            logger.info("Starting aiohttp web server with asyncio.run...")
             asyncio.run(web.run_app(
                 app,
                 host=run_host,
                 port=run_port,
                 ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None
             ))
+            logger.info("asyncio.run(web.run_app) finished.")
         else:
             # In case of an error in polling mode, run shutdown using asyncio.run
             asyncio.run(on_shutdown())
