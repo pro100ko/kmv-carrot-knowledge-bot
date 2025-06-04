@@ -9,7 +9,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramBadRequest
 from utils.message_utils import safe_edit_message
 from sqlite_db import db  # Import the database instance
-from config import ADMIN_IDS
+import config # Import the config module directly
+from config import ADMIN_IDS, ENABLE_ADMIN_PANEL # Keep these for direct access where needed
 from utils.keyboards import (
     get_admin_keyboard, get_admin_categories_keyboard,
     get_admin_products_keyboard, get_admin_products_list_keyboard,
