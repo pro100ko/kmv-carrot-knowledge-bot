@@ -1,7 +1,7 @@
 """Utility functions for message handling"""
 
 from typing import Optional, Union, Dict, Any
-from aiogram import types
+from aiogram import types, Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import logging
@@ -40,7 +40,7 @@ def format_user_message(user: Dict[str, Any]) -> str:
 async def safe_send_message(
     chat_id: int,
     text: str,
-    bot: types.Bot,
+    bot: Bot,
     parse_mode: Optional[str] = "HTML",
     reply_markup: Optional[types.InlineKeyboardMarkup] = None,
     **kwargs: Any
