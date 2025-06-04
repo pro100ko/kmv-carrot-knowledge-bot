@@ -17,7 +17,7 @@ from utils.keyboards import (
     get_pagination_keyboard
 )
 from utils.db_pool import db_pool
-from utils.metrics import metrics_collector
+from monitoring.metrics import metrics_collector
 from config import ADMIN_IDS
 
 router = Router()
