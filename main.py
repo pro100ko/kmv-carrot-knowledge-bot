@@ -242,13 +242,18 @@ if __name__ == "__main__":
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, lambda: asyncio.create_task(on_shutdown()))
         
+        # Access config variables locally for web server
+        webapp_host = config.WEBAPP_HOST
+        webapp_port = config.WEBAPP_PORT
+        webhook_ssl_cert = config.WEBHOOK_SSL_CERT
+
         # Run the application
         if ENABLE_WEBHOOK:
             web.run_app(
                 app,
-                host=WEBAPP_HOST,
-                port=WEBAPP_PORT,
-                ssl_context=get_ssl_context() if WEBHOOK_SSL_CERT else None
+                host=webapp_host,
+                port=webapp_port,
+                ssl_context=get_ssl_context() if webhook_ssl_cert else None
             )
         else:
             loop.run_until_complete(dp.start_polling(bot))
