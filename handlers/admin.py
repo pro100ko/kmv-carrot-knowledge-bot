@@ -1,5 +1,5 @@
 from aiogram import F, types
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 import uuid
 import logging

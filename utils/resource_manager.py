@@ -26,7 +26,7 @@ class ResourceManager:
         self._monitoring_task: Optional[asyncio.Task] = None
         
         # Register cleanup handlers
-        atexit.register(self.cleanup)
+        # atexit.register(self.cleanup) # Removed due to incompatibility with async cleanup
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT, self._handle_signal)
     
