@@ -4,7 +4,7 @@ import logging
 from typing import Optional, Dict, List
 from datetime import datetime, timedelta
 
-from aiogram import Router, F
+from aiogram import Router, F, Dispatcher
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -432,4 +432,8 @@ async def process_answer(message: Message, state: FSMContext):
 async def back_to_tests(callback: CallbackQuery, state: FSMContext):
     """Return to tests list."""
     await state.clear()
-    await show_tests(callback.message, state) 
+    await show_tests(callback.message, state)
+
+def setup_test_handlers(dp: Dispatcher) -> None:
+    """Register test handlers with the dispatcher."""
+    dp.include_router(router) 
