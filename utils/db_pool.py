@@ -137,29 +137,25 @@ class DatabasePool:
                     await self._close_connection(conn)
     
     async def _close_connection(self, conn: aiosqlite.Connection) -> None:
-        """Close a database connection."""
+        """Safely close a database connection."""
         try:
-            await conn.close()
-            async with self._lock:
+            if not conn.closed:
+                await conn.close()
                 self.active_connections -= 1
+                logger.debug("Database connection closed")
         except Exception as e:
             logger.error(f"Error closing database connection: {e}")
+            raise
     
     async def close(self) -> None:
         """Close all connections in the pool."""
-        if not self._initialized:
-            return
-        
         async with self._lock:
             while not self.pool.empty():
                 try:
-                    conn = await self.pool.get_nowait()
+                    conn = await self.pool.get()
                     await self._close_connection(conn)
-                except asyncio.QueueEmpty:
-                    break
                 except Exception as e:
                     logger.error(f"Error closing connection: {e}")
-            
             self._initialized = False
             self.active_connections = 0
             logger.info("Database pool closed")
@@ -234,6 +230,25 @@ class DatabasePool:
                 await conn.rollback()
                 logger.error(f"Database error executing many: {e}")
                 raise
+
+    async def cleanup(self) -> None:
+        """Cleanup resources and close all connections."""
+        logger.info("Starting database pool cleanup...")
+        await self.close()
+        logger.info("Database pool cleanup completed")
+
+    def __del__(self):
+        """Destructor to ensure connections are closed."""
+        if hasattr(self, '_initialized') and self._initialized:
+            logger.warning("DatabasePool was not properly closed")
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self.cleanup())
+                else:
+                    loop.run_until_complete(self.cleanup())
+            except Exception as e:
+                logger.error(f"Error in DatabasePool cleanup: {e}")
 
 # Create a singleton instance
 db_pool = DatabasePool(DB_FILE) 

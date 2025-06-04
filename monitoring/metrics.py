@@ -63,8 +63,19 @@ class MetricsCollector:
         """Stop metrics collection."""
         if self._running and self._task:
             self._running = False
-            self._task.cancel()
-            logger.info("Metrics collection stopped")
+            try:
+                # Cancel the task and wait for it to complete
+                self._task.cancel()
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self._wait_for_task())
+                else:
+                    loop.run_until_complete(self._wait_for_task())
+            except Exception as e:
+                logger.error(f"Error stopping metrics collection: {e}")
+            finally:
+                self._task = None
+                logger.info("Metrics collection stopped")
     
     def increment_message_count(self):
         """Increment message counter."""
@@ -240,6 +251,41 @@ class MetricsCollector:
                 op_metrics.last_error_time < cutoff_time):
                 op_metrics.last_error = None
                 op_metrics.last_error_time = None
+
+    async def _wait_for_task(self):
+        """Wait for the metrics collection task to complete."""
+        try:
+            await self._task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"Error in metrics collection task: {e}")
+
+    async def cleanup(self):
+        """Cleanup metrics collector resources."""
+        logger.info("Starting metrics collector cleanup...")
+        self.stop()
+        # Clear all metrics data
+        self._message_count = 0
+        self._callback_count = 0
+        self._error_count = 0
+        self._request_times.clear()
+        self._handler_metrics.clear()
+        self._operation_metrics.clear()
+        logger.info("Metrics collector cleanup completed")
+
+    def __del__(self):
+        """Destructor to ensure cleanup on deletion."""
+        if hasattr(self, '_running') and self._running:
+            logger.warning("MetricsCollector was not properly stopped")
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self.cleanup())
+                else:
+                    loop.run_until_complete(self.cleanup())
+            except Exception as e:
+                logger.error(f"Error in MetricsCollector cleanup: {e}")
 
 # Create and export the metrics collector instance
 metrics_collector = MetricsCollector() 

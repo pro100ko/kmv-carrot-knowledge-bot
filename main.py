@@ -4,7 +4,7 @@ import asyncio
 import logging
 import signal
 import sys
-from typing import Optional, Callable, Any, Awaitable
+from typing import Optional, Callable, Any, Awaitable, Dict
 from functools import wraps
 
 from aiogram import Bot, Dispatcher
@@ -160,23 +160,42 @@ async def on_shutdown() -> None:
     """Cleanup on shutdown."""
     logger.info("Shutting down application...")
     
-    # Stop metrics collection
-    if ENABLE_METRICS:
-        metrics_collector.stop()
-        logger.info("Metrics collection stopped")
+    try:
+        # Stop metrics collection first
+        if ENABLE_METRICS:
+            await metrics_collector.cleanup()
+            logger.info("Metrics collection stopped")
+        
+        # Stop webhook if running
+        if webhook_handler:
+            await webhook_handler.shutdown()
+            logger.info("Webhook server stopped")
+        
+        # Cleanup database pool
+        await db_pool.cleanup()
+        logger.info("Database pool cleaned up")
+        
+        # Cleanup other resources
+        await resource_manager.cleanup()
+        logger.info("Resource cleanup completed")
+        
+        # Close bot session last
+        await bot.session.close()
+        logger.info("Bot session closed")
+        
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}", exc_info=True)
+    finally:
+        logger.info("Application shutdown completed")
+
+def handle_exception(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -> None:
+    """Handle uncaught exceptions in the event loop."""
+    exception = context.get('exception', context['message'])
+    logger.error(f"Uncaught exception: {exception}", exc_info=exception if isinstance(exception, Exception) else None)
     
-    # Stop webhook if running
-    if webhook_handler:
-        await webhook_handler.shutdown()
-        logger.info("Webhook server stopped")
-    
-    # Cleanup resources
-    await resource_manager.cleanup()
-    logger.info("Resource cleanup completed")
-    
-    # Close bot session
-    await bot.session.close()
-    logger.info("Bot session closed")
+    # Schedule application shutdown
+    if not loop.is_closed():
+        loop.create_task(on_shutdown())
 
 async def health_check(request: web.Request) -> web.Response:
     """Health check endpoint."""
@@ -207,23 +226,27 @@ logger.info("Starting aiohttp web application...")
 logger.info(f"Binding to port: {WEBAPP_PORT}")
 
 if __name__ == "__main__":
-    # Start the application
-    loop = asyncio.get_event_loop()
-    
     try:
-        logger.info("Running on_startup...")
-        loop.run_until_complete(on_startup())
-        logger.info("on_startup finished.")
-        web.run_app(
-            app,
-            host="0.0.0.0",
-            port=WEBAPP_PORT,
-            ssl_context={
-                'cert': WEBHOOK_SSL_CERT,
-                'key': WEBHOOK_SSL_PRIV
-            } if WEBHOOK_SSL_CERT and WEBHOOK_SSL_PRIV else None
-        )
-    finally:
-        logger.info("Running on_shutdown...")
+        # Set up exception handler
+        loop = asyncio.get_event_loop()
+        loop.set_exception_handler(handle_exception)
+        
+        # Register signal handlers
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(on_shutdown()))
+        
+        # Run the application
+        if ENABLE_WEBHOOK:
+            web.run_app(
+                app,
+                host=WEBAPP_HOST,
+                port=WEBAPP_PORT,
+                ssl_context=get_ssl_context() if WEBHOOK_SSL_CERT else None
+            )
+        else:
+            loop.run_until_complete(dp.start_polling(bot))
+    except Exception as e:
+        logger.error(f"Application error: {e}", exc_info=True)
         loop.run_until_complete(on_shutdown())
-        logger.info("on_shutdown finished.")
+    finally:
+        loop.close()

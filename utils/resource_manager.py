@@ -79,9 +79,16 @@ class ResourceManager:
             asyncio.set_event_loop(loop)
         
         try:
-            loop.run_until_complete(self.cleanup())
+            # Run cleanup in the event loop
+            if loop.is_running():
+                # If loop is running, create a task
+                loop.create_task(self.cleanup())
+            else:
+                # If loop is not running, run until complete
+                loop.run_until_complete(self.cleanup())
         finally:
-            loop.close()
+            if not loop.is_running():
+                loop.close()
         sys.exit(0)
     
     def _start_memory_monitoring(self) -> None:
