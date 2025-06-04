@@ -43,6 +43,8 @@ from middleware import (
 from monitoring.metrics import metrics_collector
 from utils.error_handling import handle_errors, log_operation
 from utils.resource_manager import resource_manager
+# Import DatabasePool class
+from utils.db_pool import DatabasePool
 
 # Import handler setup functions
 from handlers.user import setup_user_handlers
@@ -104,9 +106,14 @@ async def on_startup(runner_instance: Any) -> None:
     """Initialize application on startup."""
     logger.info("Entering on_startup function.")
     logger.info("Starting up application...")
-    
-    # Add db_pool to globals to ensure it's available in shutdown
-    globals()['db_pool'] = db_pool
+
+    # Create and initialize DatabasePool
+    new_db_pool = DatabasePool(config.DB_FILE)
+    await new_db_pool.initialize()
+
+    # Store db_pool in aiohttp app context and globals for access
+    runner_instance['db_pool'] = new_db_pool
+    # globals()['db_pool'] = new_db_pool # Redundant if using app context, but kept for safety based on past errors
 
     # Add metrics_collector to globals for health check and shutdown access
     globals()['metrics_collector'] = metrics_collector
@@ -190,9 +197,13 @@ async def on_shutdown(runner_instance: Any) -> None:
             await webhook_handler.shutdown()
             logger.info("Webhook server stopped")
         
-        # Cleanup database pool
-        await db_pool.cleanup()
-        logger.info("Database pool cleaned up")
+        # Cleanup database pool - Retrieve from app context
+        db_pool_instance = runner_instance.get('db_pool')
+        if db_pool_instance:
+            await db_pool_instance.cleanup()
+            logger.info("Database pool cleaned up")
+        else:
+            logger.warning("db_pool instance not found in app context during shutdown.")
         
         # Cleanup other resources
         await resource_manager.cleanup()

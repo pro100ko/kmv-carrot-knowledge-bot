@@ -250,5 +250,5 @@ class DatabasePool:
             except Exception as e:
                 logger.error(f"Error in DatabasePool cleanup: {e}")
 
-# Create a singleton instance
-db_pool = DatabasePool(DB_FILE) 
+# Create a singleton instance # REMOVED: Instance will be created in main.py::on_startup
+# db_pool = DatabasePool(DB_FILE) 
