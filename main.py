@@ -16,21 +16,21 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 
-from config import (
-    BOT_TOKEN,
-    WEBHOOK_HOST,
-    WEBHOOK_PATH,
-    WEBAPP_PORT,
-    WEBHOOK_SSL_CERT,
-    WEBHOOK_SSL_PRIV,
-    ENABLE_WEBHOOK,
-    ENABLE_METRICS,
-    LOG_LEVEL,
-    WEBHOOK_URL,
-    ENVIRONMENT,
-    IS_PRODUCTION,
-    WEBAPP_HOST
-)
+import config
+# from config import (
+#     BOT_TOKEN,
+#     WEBHOOK_PATH,
+#     WEBAPP_PORT,
+#     WEBHOOK_SSL_CERT,
+#     WEBHOOK_SSL_PRIV,
+#     ENABLE_WEBHOOK,
+#     ENABLE_METRICS,
+#     LOG_LEVEL,
+#     WEBHOOK_URL,
+#     ENVIRONMENT,
+#     IS_PRODUCTION,
+#     WEBAPP_HOST
+# )
 from middleware import (
     metrics_middleware,
     error_handling_middleware,
@@ -52,16 +52,16 @@ from handlers.admin import setup_admin_handlers
 
 # Configure logging
 logging.basicConfig(
-    level=LOG_LEVEL,
+    level=config.LOG_LEVEL,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-logger.info(f"Environment: {ENVIRONMENT}, IS_PRODUCTION: {IS_PRODUCTION}")
+logger.info(f"Environment: {config.ENVIRONMENT}, IS_PRODUCTION: {config.IS_PRODUCTION}")
 
 # Initialize bot and dispatcher
 bot = Bot(
-    token=BOT_TOKEN,
+    token=config.BOT_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
 dp = Dispatcher()
@@ -76,7 +76,7 @@ load_dotenv() # Load environment variables from .env file
 
 async def setup_webhook(bot: Bot) -> None:
     """Configure webhook for the bot."""
-    if not WEBHOOK_URL:
+    if not config.WEBHOOK_URL:
         logger.error("WEBHOOK_URL is not set. Cannot configure webhook.")
         return
 
@@ -87,11 +87,11 @@ async def setup_webhook(bot: Bot) -> None:
 
         # Set new webhook
         await bot.set_webhook(
-            url=WEBHOOK_URL,
+            url=config.WEBHOOK_URL,
             allowed_updates=["message", "callback_query", "inline_query"],
             drop_pending_updates=True
         )
-        logger.info(f"Webhook set to {WEBHOOK_URL}")
+        logger.info(f"Webhook set to {config.WEBHOOK_URL}")
 
         # Verify webhook
         webhook_info = await bot.get_webhook_info()
@@ -112,10 +112,10 @@ async def on_startup() -> None:
     await resource_manager.initialize()
     logger.info("Resource manager initialized")
     
-    logger.info(f"ENABLE_WEBHOOK: {ENABLE_WEBHOOK}")
+    logger.info(f"ENABLE_WEBHOOK: {config.ENABLE_WEBHOOK}")
     
     # Start metrics collection if enabled
-    if ENABLE_METRICS:
+    if config.ENABLE_METRICS:
         metrics_collector.start()
         logger.info("Metrics collection started")
     
@@ -137,11 +137,11 @@ async def on_startup() -> None:
     logger.info("Handlers registered")
     
     # Setup webhook if enabled
-    if ENABLE_WEBHOOK:
-        if not WEBHOOK_URL:
+    if config.ENABLE_WEBHOOK:
+        if not config.WEBHOOK_URL:
             raise ValueError("WEBHOOK_URL is required when webhook mode is enabled")
             
-        logger.info(f"Attempting to setup webhook with URL: {WEBHOOK_URL}")
+        logger.info(f"Attempting to setup webhook with URL: {config.WEBHOOK_URL}")
         
         # Configure webhook in Telegram
         await setup_webhook(bot)
@@ -157,9 +157,9 @@ async def on_startup() -> None:
         )
         
         # Register webhook handler with the correct path
-        webhook_handler.register(app, path=WEBHOOK_PATH)
+        webhook_handler.register(app, path=config.WEBHOOK_PATH)
         setup_application(app, dp, bot=bot)
-        logger.info(f"Webhook server configured at {WEBHOOK_URL}")
+        logger.info(f"Webhook server configured at {config.WEBHOOK_URL}")
     else:
         # Start polling
         await dp.start_polling(bot)
@@ -171,7 +171,7 @@ async def on_shutdown() -> None:
     
     try:
         # Stop metrics collection first
-        if ENABLE_METRICS:
+        if config.ENABLE_METRICS:
             await metrics_collector.cleanup()
             logger.info("Metrics collection stopped")
         
@@ -210,7 +210,7 @@ async def health_check(request: web.Request) -> web.Response:
     """Health check endpoint."""
     try:
         # Get metrics if enabled
-        if ENABLE_METRICS:
+        if config.ENABLE_METRICS:
             metrics = metrics_collector.get_metrics()
             return web.json_response({
                 "status": "healthy",
@@ -232,15 +232,15 @@ app.on_startup.append(on_startup)
 app.on_shutdown.append(on_shutdown)
 
 logger.info("Starting aiohttp web application...")
-logger.info(f"Binding to port: {WEBAPP_PORT}")
+logger.info(f"Binding to port: {config.WEBAPP_PORT}")
 
 def get_ssl_context() -> Optional[ssl.SSLContext]:
     """Create SSL context for webhook."""
-    if not WEBHOOK_SSL_CERT or not WEBHOOK_SSL_PRIV:
+    if not config.WEBHOOK_SSL_CERT or not config.WEBHOOK_SSL_PRIV:
         return None
     try:
         ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        ssl_context.load_cert_chain(WEBHOOK_SSL_CERT, WEBHOOK_SSL_PRIV)
+        ssl_context.load_cert_chain(config.WEBHOOK_SSL_CERT, config.WEBHOOK_SSL_PRIV)
         return ssl_context
     except Exception as e:
         logger.error(f"Failed to create SSL context: {e}", exc_info=True)
@@ -257,19 +257,19 @@ if __name__ == "__main__":
             loop.add_signal_handler(sig, lambda: asyncio.create_task(on_shutdown()))
         
         # Determine host and port based on environment
-        run_host = WEBAPP_HOST
-        run_port = WEBAPP_PORT
-        if IS_PRODUCTION:
+        run_host = config.WEBAPP_HOST
+        run_port = config.WEBAPP_PORT
+        if config.IS_PRODUCTION:
             run_host = '0.0.0.0'
-            run_port = int(os.getenv('PORT', WEBAPP_PORT)) # Use PORT env variable in production
+            run_port = int(os.getenv('PORT', config.WEBAPP_PORT)) # Use PORT env variable in production
 
         # Run the application
-        if ENABLE_WEBHOOK:
+        if config.ENABLE_WEBHOOK:
             web.run_app(
                 app,
                 host=run_host,
                 port=run_port,
-                ssl_context=get_ssl_context() if WEBHOOK_SSL_CERT else None
+                ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None
             )
         else:
             loop.run_until_complete(dp.start_polling(bot))
