@@ -111,16 +111,19 @@ async def on_startup(runner_instance: Any) -> None:
     new_db_pool = DatabasePool(config.DB_FILE)
     await new_db_pool.initialize()
 
-    # Store db_pool in aiohttp app context and globals for access
-    runner_instance['db_pool'] = new_db_pool
-    # globals()['db_pool'] = new_db_pool # Redundant if using app context, but kept for safety based on past errors
+    # Initialize sqlite_db module with the pool
+    sqlite_db.initialize(new_db_pool)
+
+    # Store db_pool in aiohttp app context and dp.data for access
+    runner_instance['db_pool'] = new_db_pool # Keep in aiohttp context for shutdown cleanup
+    dp.data['db_pool'] = new_db_pool # Store in dp.data for handler access
 
     # Add metrics_collector to globals for health check and shutdown access
-    # globals()['metrics_collector'] = metrics_collector
+    # globals()['metrics_collector'] = metrics_collector # Removed: Will be accessed via app context/factory
 
     # Store metrics_collector and db_pool in aiohttp app context for reliable handler access
-    runner_instance['metrics_collector'] = metrics_collector
-    runner_instance['db_pool'] = new_db_pool # Ensure db_pool is also in context
+    runner_instance['metrics_collector'] = metrics_collector # Keep in aiohttp context
+    # runner_instance['db_pool'] = new_db_pool # Redundant, already done above
 
     # Create and store health check handler with metrics_collector injected
     runner_instance['health_check_handler'] = create_health_check_handler(metrics_collector)
