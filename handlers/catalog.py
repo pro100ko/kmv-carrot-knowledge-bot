@@ -4,12 +4,11 @@ import logging
 from typing import Optional, Dict, List
 from datetime import datetime
 
-from aiogram import Router, F
+from aiogram import Router, F, Dispatcher
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.dispatcher import Dispatcher
 
 from utils.keyboards import (
     get_catalog_keyboard,
