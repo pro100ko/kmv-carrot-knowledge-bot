@@ -9,7 +9,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramBadRequest
 from utils.message_utils import safe_edit_message
 from sqlite_db import db  # Import the database instance
-from config import ADMIN_USER_IDS
+from config import ADMIN_IDS
 from utils.keyboards import (
     get_admin_keyboard, get_admin_categories_keyboard,
     get_admin_products_keyboard, get_admin_products_list_keyboard,
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
 async def check_admin_access(user_id: int, query: types.CallbackQuery = None) -> bool:
     """Проверяет права администратора"""
-    if user_id not in ADMIN_USER_IDS:  # Updated to use ADMIN_USER_IDS
+    if user_id not in ADMIN_IDS:  # Updated to use ADMIN_IDS
         msg = "⛔ У вас нет доступа к административной панели"
         if query:
             await query.answer(msg)
@@ -40,7 +40,7 @@ async def check_admin_access(user_id: int, query: types.CallbackQuery = None) ->
     return True
 
 async def admin_check_middleware(handler, event, data):
-    if event.from_user.id not in ADMIN_USER_IDS:
+    if event.from_user.id not in ADMIN_IDS:
         await event.answer("Доступ запрещен")
         return
     return await handler(event, data)
@@ -708,7 +708,7 @@ class AdminStates(StatesGroup):
 
 def is_admin(user_id: int) -> bool:
     """Check if user is an admin."""
-    return user_id in ADMIN_USER_IDS
+    return user_id in ADMIN_IDS
 
 @dp.message(Command("admin"))
 @dp.message(F.text == "⚙️ Управление")
