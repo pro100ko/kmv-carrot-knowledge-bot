@@ -8,6 +8,7 @@ import os
 from dotenv import load_dotenv
 from typing import Optional, Callable, Any, Awaitable, Dict
 from functools import wraps
+import ssl
 
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
@@ -27,7 +28,8 @@ from config import (
     LOG_LEVEL,
     WEBHOOK_URL,
     ENVIRONMENT,
-    IS_PRODUCTION
+    IS_PRODUCTION,
+    WEBAPP_HOST
 )
 from middleware import (
     metrics_middleware,
@@ -232,6 +234,18 @@ app.on_shutdown.append(on_shutdown)
 logger.info("Starting aiohttp web application...")
 logger.info(f"Binding to port: {WEBAPP_PORT}")
 
+def get_ssl_context() -> Optional[ssl.SSLContext]:
+    """Create SSL context for webhook."""
+    if not WEBHOOK_SSL_CERT or not WEBHOOK_SSL_PRIV:
+        return None
+    try:
+        ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ssl_context.load_cert_chain(WEBHOOK_SSL_CERT, WEBHOOK_SSL_PRIV)
+        return ssl_context
+    except Exception as e:
+        logger.error(f"Failed to create SSL context: {e}", exc_info=True)
+        return None
+
 if __name__ == "__main__":
     try:
         # Set up exception handler
@@ -242,18 +256,20 @@ if __name__ == "__main__":
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, lambda: asyncio.create_task(on_shutdown()))
         
-        # Access config variables locally for web server
-        webapp_host = config.WEBAPP_HOST
-        webapp_port = config.WEBAPP_PORT
-        webhook_ssl_cert = config.WEBHOOK_SSL_CERT
+        # Determine host and port based on environment
+        run_host = WEBAPP_HOST
+        run_port = WEBAPP_PORT
+        if IS_PRODUCTION:
+            run_host = '0.0.0.0'
+            run_port = int(os.getenv('PORT', WEBAPP_PORT)) # Use PORT env variable in production
 
         # Run the application
         if ENABLE_WEBHOOK:
             web.run_app(
                 app,
-                host=webapp_host,
-                port=webapp_port,
-                ssl_context=get_ssl_context() if webhook_ssl_cert else None
+                host=run_host,
+                port=run_port,
+                ssl_context=get_ssl_context() if WEBHOOK_SSL_CERT else None
             )
         else:
             loop.run_until_complete(dp.start_polling(bot))
