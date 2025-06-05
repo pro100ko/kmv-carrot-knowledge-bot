@@ -46,7 +46,6 @@ from middleware import (
     UserActivityMiddleware,
     RateLimitMiddleware
 )
-from utils.webhook import setup_webhook
 from utils.polling import setup_polling
 from utils.health_check import create_health_check_handler
 from monitoring.metrics import MetricsCollector
