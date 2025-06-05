@@ -39,7 +39,7 @@ from utils.resource_manager import ResourceManager
 from logging_config import setup_logging
 from middleware import (
     MetricsMiddleware,
-    ErrorHandlerMiddleware,
+    ErrorHandlingMiddleware,
     StateManagementMiddleware,
     LoggingMiddleware,
     AdminAccessMiddleware,
@@ -160,7 +160,7 @@ async def on_startup(runner_instance: Any) -> None:
         
         # Register middleware
         dp.update.middleware(MetricsMiddleware())
-        dp.update.middleware(ErrorHandlerMiddleware())
+        dp.update.middleware(ErrorHandlingMiddleware())
         dp.update.middleware(StateManagementMiddleware())
         dp.update.middleware(LoggingMiddleware())
         dp.update.middleware(AdminAccessMiddleware())
