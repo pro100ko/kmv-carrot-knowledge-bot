@@ -36,7 +36,6 @@ import config
 # )
 from utils.db_pool import DatabasePool
 from utils.resource_manager import ResourceManager
-from utils.error_handler import setup_error_handlers
 from utils.logging_config import setup_logging
 from utils.middleware import (
     MetricsMiddleware,
@@ -54,7 +53,7 @@ from utils.health_check import create_health_check_handler
 from monitoring.metrics import MetricsCollector
 from utils.error_handling import handle_errors, log_operation
 from utils.resource_manager import resource_manager
-import sqlite_db  # Add this import
+import sqlite_db
 
 # Import handler setup functions
 from handlers.user import setup_user_handlers
@@ -100,7 +99,7 @@ async def setup_webhook(bot: Bot, dp: Dispatcher, webhook_url: str, webhook_path
         # Set new webhook
         await bot.set_webhook(
             url=webhook_url,
-            allowed_updates=["message", "callback_query", "inline_query"],
+            certificate=types.FSInputFile(config.WEBHOOK_SSL_CERT) if config.WEBHOOK_SSL_CERT else None,
             drop_pending_updates=True
         )
         logger.info(f"Webhook set to {webhook_url}")
