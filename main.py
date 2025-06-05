@@ -9,10 +9,13 @@ from dotenv import load_dotenv
 from typing import Optional, Callable, Any, Awaitable, Dict
 from functools import wraps
 import ssl
+from datetime import datetime
 
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.filters import Command
+from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 
@@ -31,20 +34,27 @@ import config
 #     IS_PRODUCTION,
 #     WEBAPP_HOST
 # )
-from middleware import (
-    metrics_middleware,
-    error_handling_middleware,
-    state_management_middleware,
-    logging_middleware,
+from utils.db_pool import DatabasePool
+from utils.resource_manager import ResourceManager
+from utils.error_handler import setup_error_handlers
+from utils.logging_config import setup_logging
+from utils.middleware import (
+    MetricsMiddleware,
+    ErrorHandlerMiddleware,
+    StateManagementMiddleware,
+    LoggingMiddleware,
     AdminAccessMiddleware,
     UserActivityMiddleware,
     RateLimitMiddleware
 )
-from monitoring.metrics import metrics_collector
+from utils.state import setup_states
+from utils.webhook import setup_webhook
+from utils.polling import setup_polling
+from utils.health_check import create_health_check_handler
+from monitoring.metrics import MetricsCollector
 from utils.error_handling import handle_errors, log_operation
 from utils.resource_manager import resource_manager
-# Import DatabasePool class
-from utils.db_pool import DatabasePool
+import sqlite_db  # Add this import
 
 # Import handler setup functions
 from handlers.user import setup_user_handlers
@@ -76,9 +86,9 @@ webhook_handler: Optional[SimpleRequestHandler] = None
 
 load_dotenv() # Load environment variables from .env file
 
-async def setup_webhook(bot: Bot) -> None:
+async def setup_webhook(bot: Bot, dp: Dispatcher, webhook_url: str, webhook_path: str) -> None:
     """Configure webhook for the bot."""
-    if not config.WEBHOOK_URL:
+    if not webhook_url:
         logger.error("WEBHOOK_URL is not set. Cannot configure webhook.")
         return
 
@@ -89,86 +99,17 @@ async def setup_webhook(bot: Bot) -> None:
 
         # Set new webhook
         await bot.set_webhook(
-            url=config.WEBHOOK_URL,
+            url=webhook_url,
             allowed_updates=["message", "callback_query", "inline_query"],
             drop_pending_updates=True
         )
-        logger.info(f"Webhook set to {config.WEBHOOK_URL}")
+        logger.info(f"Webhook set to {webhook_url}")
 
         # Verify webhook
         webhook_info = await bot.get_webhook_info()
         logger.info(f"Webhook info: {webhook_info}")
-    except Exception as e:
-        logger.error(f"Failed to setup webhook: {e}")
-        raise
 
-async def on_startup(runner_instance: Any) -> None:
-    """Initialize application on startup."""
-    logger.info("Entering on_startup function.")
-    logger.info("Starting up application...")
-
-    # Create and initialize DatabasePool
-    new_db_pool = DatabasePool(config.DB_FILE)
-    await new_db_pool.initialize()
-
-    # Initialize sqlite_db module with the pool
-    sqlite_db.initialize(new_db_pool)
-
-    # Store db_pool in aiohttp app context and dp.data for access
-    runner_instance['db_pool'] = new_db_pool # Keep in aiohttp context for shutdown cleanup
-    dp.data['db_pool'] = new_db_pool # Store in dp.data for handler access
-
-    # Add metrics_collector to globals for health check and shutdown access
-    # globals()['metrics_collector'] = metrics_collector # Removed: Will be accessed via app context/factory
-
-    # Store metrics_collector and db_pool in aiohttp app context for reliable handler access
-    runner_instance['metrics_collector'] = metrics_collector # Keep in aiohttp context
-    # runner_instance['db_pool'] = new_db_pool # Redundant, already done above
-
-    # Create and store health check handler with metrics_collector injected
-    runner_instance['health_check_handler'] = create_health_check_handler(metrics_collector)
-
-    # Initialize resource manager
-    await resource_manager.initialize()
-    logger.info("Resource manager initialized")
-    
-    logger.info(f"ENABLE_WEBHOOK: {config.ENABLE_WEBHOOK}")
-    
-    # Start metrics collection if enabled
-    if config.ENABLE_METRICS:
-        metrics_collector.start()
-        logger.info("Metrics collection started")
-    
-    # Register middleware
-    dp.update.middleware(metrics_middleware)
-    dp.update.middleware(error_handling_middleware)
-    dp.update.middleware(state_management_middleware)
-    dp.update.middleware(logging_middleware)
-    dp.update.middleware(AdminAccessMiddleware())
-    dp.update.middleware(UserActivityMiddleware())
-    dp.update.middleware(RateLimitMiddleware())
-    logger.info("Middleware registered")
-    
-    # Register handlers
-    setup_user_handlers(dp)
-    setup_catalog_handlers(dp)
-    setup_test_handlers(dp)
-    setup_admin_handlers(dp)
-    logger.info("Handlers registered")
-    
-    # Setup webhook if enabled
-    if config.ENABLE_WEBHOOK:
-        if not config.WEBHOOK_URL:
-            raise ValueError("WEBHOOK_URL is required when webhook mode is enabled")
-            
-        logger.info(f"Attempting to setup webhook with URL: {config.WEBHOOK_URL}")
-        
-        # Configure webhook in Telegram
-        await setup_webhook(bot)
-        
-        logger.info("Webhook setup function called.")
-        
-        # Setup webhook handler
+        # Create and store webhook handler
         global webhook_handler
         webhook_handler = SimpleRequestHandler(
             dispatcher=dp,
@@ -176,58 +117,108 @@ async def on_startup(runner_instance: Any) -> None:
             handle_signals=False
         )
         
-        # Register webhook handler with the correct path
-        webhook_handler.register(app, path=config.WEBHOOK_PATH)
+        # Register webhook handler with the app
+        webhook_handler.register(app, path=webhook_path)
         setup_application(app, dp, bot=bot)
-        logger.info(f"Webhook server configured at {config.WEBHOOK_URL}")
-    else:
-        # In polling mode, register on_startup with the dispatcher
-        dp.startup_handlers.append(on_startup)
-        # Use asyncio.run for the main entry point in polling mode
-        logger.info("Starting bot in polling mode with asyncio.run...")
-        asyncio.run(dp.start_polling(bot))
-        logger.info("asyncio.run(dp.start_polling) finished.")
+        logger.info(f"Webhook handler registered at path: {webhook_path}")
+        
+    except Exception as e:
+        logger.error(f"Error setting up webhook: {e}", exc_info=True)
+        raise
+
+async def on_startup(runner_instance: Any) -> None:
+    """Initialize application resources and start services."""
+    logger.info("Entering on_startup function.")
+    try:
+        logger.info("Starting up application...")
+        
+        # Initialize database pool
+        new_db_pool = DatabasePool(
+            db_path=config.DB_PATH,
+            max_connections=config.DB_MAX_CONNECTIONS,
+            timeout=config.DB_TIMEOUT
+        )
+        await new_db_pool.initialize()  # Initialize the pool first
+        
+        # Store db_pool in both runner and dispatcher
+        runner_instance['db_pool'] = new_db_pool
+        dp.data['db_pool'] = new_db_pool
+        
+        # Initialize sqlite_db with the new pool
+        sqlite_db.initialize(new_db_pool)
+        await sqlite_db.db.initialize()  # Initialize the database instance
+        
+        # Initialize metrics collector
+        metrics = MetricsCollector()  # Create new instance
+        metrics.start()  # Start metrics collection
+        runner_instance['metrics_collector'] = metrics
+        dp.data['metrics_collector'] = metrics
+        
+        # Create and store health check handler
+        health_check_handler = create_health_check_handler(metrics)  # Use the new instance
+        runner_instance['health_check_handler'] = health_check_handler
+        app.router.add_get('/health', health_check_handler)
+        
+        # Register middleware
+        dp.update.middleware(MetricsMiddleware())
+        dp.update.middleware(ErrorHandlerMiddleware())
+        dp.update.middleware(StateManagementMiddleware())
+        dp.update.middleware(LoggingMiddleware())
+        dp.update.middleware(AdminAccessMiddleware())
+        dp.update.middleware(UserActivityMiddleware())
+        dp.update.middleware(RateLimitMiddleware())
+        logger.info("Middleware registered")
+        
+        # Setup webhook or polling based on environment
+        if config.IS_PRODUCTION:
+            await setup_webhook(bot, dp, config.WEBHOOK_URL, config.WEBHOOK_PATH)
+        else:
+            await setup_polling(dp)
+        
+        # Setup bot commands
+        await setup_bot_commands(bot)
+        
+        # Setup handlers
+        setup_handlers(dp)
+        setup_admin_handlers(dp)
+        
+        logger.info("Application startup completed successfully")
+    except Exception as e:
+        logger.error(f"Error during startup: {e}", exc_info=True)
+        raise
 
 async def on_shutdown(runner_instance: Any) -> None:
-    """Cleanup on shutdown."""
+    """Clean up application resources."""
     logger.info("Entering on_shutdown function.")
-    logger.info("Shutting down application...")
-    
     try:
-        # Stop metrics collection first
-        if config.ENABLE_METRICS:
-            await metrics_collector.cleanup()
+        logger.info("Shutting down application...")
+        
+        # Stop metrics collection
+        metrics_collector = runner_instance.get('metrics_collector')
+        if metrics_collector:
+            await metrics_collector.cleanup()  # Use cleanup instead of stop to ensure proper cleanup
             logger.info("Metrics collection stopped")
         
         # Stop webhook if running
+        global webhook_handler
         if webhook_handler:
             await webhook_handler.shutdown()
             logger.info("Webhook server stopped")
         
-        # Cleanup database pool - Retrieve from app context
+        # Close database pool
         db_pool_instance = runner_instance.get('db_pool')
         if db_pool_instance:
-            await db_pool_instance.cleanup()
-            logger.info("Database pool cleaned up")
-        else:
-            logger.warning("db_pool instance not found in app context during shutdown.")
+            await db_pool_instance.close()
+            logger.info("Database pool closed")
         
-        # Cleanup other resources
-        await resource_manager.cleanup()
-        logger.info("Resource cleanup completed")
-        
-        # Close bot session last
+        # Close bot session
         await bot.session.close()
         logger.info("Bot session closed")
         
+        logger.info("Application shutdown completed")
     except Exception as e:
         logger.error(f"Error during shutdown: {e}", exc_info=True)
-    finally:
-        logger.info("Application shutdown completed")
-        # When using asyncio.run, the loop is managed and closed by asyncio.run
-        # Avoid explicit loop.close() here to prevent errors.
-        # loop.close() # Removed explicit loop closure
-        pass # Loop closure handled by asyncio.run or aiohttp
+        raise
 
 def handle_exception(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -> None:
     """Handle uncaught exceptions in the event loop."""
@@ -237,33 +228,6 @@ def handle_exception(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -
     # Schedule application shutdown
     if not loop.is_closed():
         loop.create_task(on_shutdown(None))
-
-def create_health_check_handler(metrics_collector_instance):
-    """Factory to create a health check handler with metrics_collector injected."""
-    async def health_check(request: web.Request) -> web.Response:
-        """Health check endpoint."""
-        try:
-            # Get metrics if enabled
-            if config.ENABLE_METRICS:
-                # Access metrics_collector instance passed via closure
-                if metrics_collector_instance:
-                    metrics = metrics_collector_instance.get_metrics()
-                else:
-                    logger.error("Metrics collector instance not available in health check handler.")
-                    metrics = {"error": "Metrics collector not available"}
-
-                return web.json_response({
-                    "status": "healthy",
-                    "metrics": metrics
-                })
-            return web.json_response({"status": "healthy"})
-        except Exception as e:
-            logger.error(f"Health check failed: {e}")
-            return web.json_response(
-                {"status": "unhealthy", "error": str(e)},
-                status=500
-            )
-    return health_check
 
 # Add health check endpoint - will be set in on_startup now
 # app.router.add_get("/health", health_check) # REMOVED: Router setup moved to on_startup
@@ -287,23 +251,59 @@ def get_ssl_context() -> Optional[ssl.SSLContext]:
         logger.error(f"Failed to create SSL context: {e}", exc_info=True)
         return None
 
+async def setup_bot_commands(bot: Bot) -> None:
+    """Configure bot commands."""
+    try:
+        # Define commands for all users
+        commands = [
+            BotCommand(command="start", description="Начать работу с ботом"),
+            BotCommand(command="help", description="Показать справку"),
+            BotCommand(command="catalog", description="Просмотр каталога продукции"),
+            BotCommand(command="search", description="Поиск по базе знаний"),
+            BotCommand(command="tests", description="Доступные тесты"),
+            BotCommand(command="profile", description="Мой профиль")
+        ]
+        
+        # Add admin commands if user is admin
+        admin_commands = [
+            BotCommand(command="admin", description="Панель управления"),
+            BotCommand(command="stats", description="Статистика использования"),
+            BotCommand(command="users", description="Управление пользователями"),
+            BotCommand(command="categories", description="Управление категориями"),
+            BotCommand(command="settings", description="Настройки бота")
+        ]
+        
+        # Set commands for all users
+        await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
+        
+        # Set admin commands for admin users
+        for admin_id in config.ADMIN_IDS:
+            await bot.set_my_commands(
+                commands + admin_commands,
+                scope=BotCommandScopeChat(chat_id=admin_id)
+            )
+        
+        logger.info("Bot commands configured successfully")
+    except Exception as e:
+        logger.error(f"Error setting up bot commands: {e}", exc_info=True)
+        raise
+
 if __name__ == "__main__":
     try:
+        # Setup logging
+        setup_logging()
+        
         # Set up exception handler
         loop = asyncio.get_event_loop()
         loop.set_exception_handler(handle_exception)
         
-        # Register signal handlers
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, lambda: asyncio.create_task(on_shutdown(None)))
-        
-        # Determine host and port based on environment
+        # Get host and port
         run_host = config.WEBAPP_HOST
         run_port = config.WEBAPP_PORT
         if config.IS_PRODUCTION:
             run_host = '0.0.0.0'
-            run_port = int(os.getenv('PORT', config.WEBAPP_PORT)) # Use PORT env variable in production
-
+            run_port = int(os.getenv('PORT', config.WEBAPP_PORT))  # Use PORT env variable in production
+        
         # Run the application
         if config.ENABLE_WEBHOOK:
             # Use asyncio.run for the main entry point in webhook mode
@@ -314,16 +314,39 @@ if __name__ == "__main__":
                 port=run_port,
                 ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None
             ))
-            logger.info("asyncio.run(web.run_app) finished.")
+            logger.info("Web server stopped.")
         else:
-            # In case of an error in polling mode, run shutdown using asyncio.run
-            asyncio.run(on_shutdown(None))
+            # In polling mode, we need to run the dispatcher directly
+            logger.info("Starting bot in polling mode...")
+            try:
+                # Start polling in the background
+                loop.create_task(dp.start_polling(
+                    allowed_updates=["message", "callback_query", "inline_query"],
+                    drop_pending_updates=True
+                ))
+                # Run the event loop
+                loop.run_forever()
+            except KeyboardInterrupt:
+                logger.info("Received shutdown signal, stopping bot...")
+            except Exception as e:
+                logger.error(f"Error in polling mode: {e}", exc_info=True)
+            finally:
+                # Run cleanup
+                loop.run_until_complete(on_shutdown(None))
+                loop.close()
+                logger.info("Bot stopped.")
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
-        # In case of an error in webhook mode, run shutdown using asyncio.run
-        asyncio.run(on_shutdown(None))
-    finally:
-        # When using asyncio.run, the loop is managed and closed by asyncio.run
-        # Avoid explicit loop.close() here to prevent errors.
-        # loop.close() # Removed explicit loop closure
-        pass # Loop closure handled by asyncio.run or aiohttp
+        # Run cleanup in case of error
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(on_shutdown(None))
+            else:
+                loop.run_until_complete(on_shutdown(None))
+        except Exception as cleanup_error:
+            logger.error(f"Error during cleanup: {cleanup_error}", exc_info=True)
+        finally:
+            if not loop.is_closed():
+                loop.close()
+            sys.exit(1)
