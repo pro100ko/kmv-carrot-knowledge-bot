@@ -83,6 +83,51 @@ app = web.Application()
 # Store webhook handler for cleanup
 webhook_handler: Optional[SimpleRequestHandler] = None
 
+async def setup_webhook(bot: Bot, dp: Dispatcher, webhook_url: str, webhook_path: str) -> None:
+    """Configure webhook for the bot."""
+    if not webhook_url:
+        logger.error("WEBHOOK_URL is not set. Cannot configure webhook.")
+        return
+
+    try:
+        # Remove any existing webhook
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Deleted existing webhook")
+
+        # Set new webhook
+        await bot.set_webhook(
+            url=webhook_url,
+            certificate=types.FSInputFile(config.WEBHOOK_SSL_CERT) if config.WEBHOOK_SSL_CERT else None,
+            drop_pending_updates=True
+        )
+        logger.info(f"Webhook set to {webhook_url}")
+
+        # Verify webhook
+        webhook_info = await bot.get_webhook_info()
+        logger.info(f"Webhook info: {webhook_info}")
+
+        # Create and store webhook handler
+        global webhook_handler
+        webhook_handler = SimpleRequestHandler(
+            dispatcher=dp,
+            bot=bot,
+            handle_signals=False
+        )
+        
+        # Register webhook handler with the app
+        webhook_handler.register(app, path=webhook_path)
+        setup_application(app, dp, bot=bot)
+        logger.info(f"Webhook handler registered at path: {webhook_path}")
+        
+    except Exception as e:
+        logger.error(f"Error setting up webhook: {e}", exc_info=True)
+        raise
+
+async def on_startup(runner_instance: Any) -> None:
+    """Initialize application resources and start services."""
+    logger.info("Entering on_startup function.")
+    try:
+
 # Initialize database pool
 new_db_pool = DatabasePool(
     db_path=config.DB_PATH,
@@ -133,51 +178,7 @@ setup_test_handlers(dp)
 setup_admin_handlers(dp)
 
 logger.info("Application startup completed successfully")
-
-async def setup_webhook(bot: Bot, dp: Dispatcher, webhook_url: str, webhook_path: str) -> None:
-    """Configure webhook for the bot."""
-    if not webhook_url:
-        logger.error("WEBHOOK_URL is not set. Cannot configure webhook.")
-        return
-
-    try:
-        # Remove any existing webhook
-        await bot.delete_webhook(drop_pending_updates=True)
-        logger.info("Deleted existing webhook")
-
-        # Set new webhook
-        await bot.set_webhook(
-            url=webhook_url,
-            certificate=types.FSInputFile(config.WEBHOOK_SSL_CERT) if config.WEBHOOK_SSL_CERT else None,
-            drop_pending_updates=True
-        )
-        logger.info(f"Webhook set to {webhook_url}")
-
-        # Verify webhook
-        webhook_info = await bot.get_webhook_info()
-        logger.info(f"Webhook info: {webhook_info}")
-
-        # Create and store webhook handler
-        global webhook_handler
-        webhook_handler = SimpleRequestHandler(
-            dispatcher=dp,
-            bot=bot,
-            handle_signals=False
-        )
         
-        # Register webhook handler with the app
-        webhook_handler.register(app, path=webhook_path)
-        setup_application(app, dp, bot=bot)
-        logger.info(f"Webhook handler registered at path: {webhook_path}")
-        
-    except Exception as e:
-        logger.error(f"Error setting up webhook: {e}", exc_info=True)
-        raise
-
-async def on_startup(runner_instance: Any) -> None:
-    """Initialize application resources and start services."""
-    logger.info("Entering on_startup function.")
-    try:
         logger.info("Starting up application...")
 
         # Initialize database pool
