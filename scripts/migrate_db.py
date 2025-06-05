@@ -12,7 +12,6 @@ from config import (
     DB_FILE, DB_MIGRATIONS_DIR, DB_BACKUP_DIR,
     DB_BACKUP_KEEP_DAYS
 )
-from utils.db_pool import db_pool
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -175,9 +174,6 @@ async def main() -> None:
     except Exception as e:
         logger.error(f"Migration process failed: {e}")
         raise
-    finally:
-        # Close database pool
-        await db_pool.close_all()
 
 if __name__ == "__main__":
     # Configure logging

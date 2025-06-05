@@ -15,7 +15,6 @@ from config import (
     MAX_MEMORY_USAGE_MB, MAX_CPU_USAGE_PERCENT,
     DB_FILE, DB_BACKUP_DIR
 )
-from utils.db_pool import db_pool
 
 # Configure logging
 logger = logging.getLogger(__name__)

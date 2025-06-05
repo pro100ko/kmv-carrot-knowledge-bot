@@ -17,7 +17,6 @@ from utils.keyboards import (
     get_confirm_keyboard,
     get_back_keyboard
 )
-from utils.db_pool import db_pool
 from monitoring.metrics import metrics_collector
 from config import ADMIN_IDS
 

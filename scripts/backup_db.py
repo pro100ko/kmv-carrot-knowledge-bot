@@ -13,7 +13,6 @@ from config import (
     DB_FILE, DB_BACKUP_DIR, DB_BACKUP_KEEP_DAYS,
     DB_BACKUP_COMPRESS
 )
-from utils.db_pool import db_pool
 
 # Configure logging
 logger = logging.getLogger(__name__)

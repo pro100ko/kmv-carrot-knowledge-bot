@@ -12,7 +12,7 @@ import bcrypt
 from pathlib import Path
 
 from config import DB_FILE, DB_POOL_TIMEOUT, DB_BACKUP_DIR, DB_POOL_SIZE, DB_MIGRATIONS_DIR
-from utils.db_pool import db_pool, with_connection
+from utils.db_pool import with_connection
 from utils.resource_manager import log_execution_time
 
 # Configure logging

@@ -22,7 +22,6 @@ from utils.keyboards import (
 )
 from dispatcher import dp
 from states import CategoryForm, ProductForm, TestForm
-from utils.db_pool import db_pool
 from monitoring.metrics import metrics_collector
 from typing import Optional, Dict, List
 from datetime import datetime, timedelta
