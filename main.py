@@ -37,7 +37,7 @@ import config
 from utils.db_pool import DatabasePool
 from utils.resource_manager import ResourceManager
 from logging_config import setup_logging
-from utils.middleware import (
+from middleware import (
     MetricsMiddleware,
     ErrorHandlerMiddleware,
     StateManagementMiddleware,
