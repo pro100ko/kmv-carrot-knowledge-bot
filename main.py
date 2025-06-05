@@ -178,7 +178,9 @@ async def on_startup(runner_instance: Any) -> None:
         await setup_bot_commands(bot)
         
         # Setup handlers
-        setup_handlers(dp)
+        setup_user_handlers(dp)
+        setup_catalog_handlers(dp)
+        setup_test_handlers(dp)
         setup_admin_handlers(dp)
         
         logger.info("Application startup completed successfully")
