@@ -27,7 +27,7 @@ from typing import Optional, Dict, List
 from datetime import datetime, timedelta
 
 # Import the global resources dictionary from main
-from main import app_resources
+# from main import app_resources
 
 logger = logging.getLogger(__name__)
 
@@ -80,10 +80,6 @@ async def send_admin_menu(
             parse_mode=ParseMode.HTML,
             reply_markup=get_admin_keyboard()
         )
-
-# Helper to get db_pool from global resources
-def get_db_pool():
-    return app_resources.get('db_pool')
 
 # ===== ОСНОВНЫЕ ОБРАБОТЧИКИ =====
 @dp.callback_query()
@@ -750,11 +746,11 @@ async def manage_users(callback: CallbackQuery, state: FSMContext):
         return
     
     try:
-        # Get db_pool from bot data
-        db_pool = get_db_pool()
+        # Get db_pool from bot_data
+        db_pool = callback.bot.bot_data.get('db_pool')
         if not db_pool:
             logger.error("Database pool not available in handler context.")
-            await callback.answer("😔 Ошибка доступа к базе данных.", show_alert=True)
+            await callback.answer("Database connection not available.")
             return
 
         # Get user statistics
@@ -830,11 +826,11 @@ async def manage_catalog(callback: CallbackQuery, state: FSMContext):
         return
     
     try:
-        # Get db_pool from bot data
-        db_pool = get_db_pool()
+        # Get db_pool from bot_data
+        db_pool = callback.bot.bot_data.get('db_pool')
         if not db_pool:
             logger.error("Database pool not available in handler context.")
-            await callback.answer("😔 Ошибка доступа к базе данных.", show_alert=True)
+            await callback.answer("Database connection not available.")
             return
 
         # Get catalog statistics
@@ -902,11 +898,11 @@ async def manage_tests(callback: CallbackQuery, state: FSMContext):
         return
     
     try:
-        # Get db_pool from bot data
-        db_pool = get_db_pool()
+        # Get db_pool from bot_data
+        db_pool = callback.bot.bot_data.get('db_pool')
         if not db_pool:
             logger.error("Database pool not available in handler context.")
-            await callback.answer("😔 Ошибка доступа к базе данных.", show_alert=True)
+            await callback.answer("Database connection not available.")
             return
 
         # Get test statistics
@@ -993,11 +989,11 @@ async def view_stats(callback: CallbackQuery, state: FSMContext):
         return
     
     try:
-        # Get db_pool from bot data
-        db_pool = get_db_pool()
+        # Get db_pool from bot_data
+        db_pool = callback.bot.bot_data.get('db_pool')
         if not db_pool:
             logger.error("Database pool not available in handler context.")
-            await callback.answer("😔 Ошибка доступа к базе данных.", show_alert=True)
+            await callback.answer("Database connection not available.")
             return
 
         # Get general statistics

@@ -93,34 +93,28 @@ async def on_startup(runner_instance: web.Application) -> None:
         logger.info("Starting up application...")
 
         # Initialize database pool
-        # Removed temporarily for debugging AttributeError
-        # new_db_pool = DatabasePool(
-        #     db_file=config.DB_FILE,
-        #     pool_size=config.DB_POOL_SIZE
-        # )
-        # await new_db_pool.initialize()  # Initialize the pool first
+        new_db_pool = DatabasePool(
+            db_file=config.DB_FILE,
+            pool_size=config.DB_POOL_SIZE
+        )
+        await new_db_pool.initialize()
 
-        # Store db_pool in the aiohttp application instance
-        # Removed temporarily for debugging AttributeError
-        # runner_instance['db_pool'] = new_db_pool
+        # Store db_pool in the application instance and bot_data
+        runner_instance['db_pool'] = new_db_pool
+        dp.bot_data['db_pool'] = new_db_pool
 
         # Initialize sqlite_db with the new pool
-        # Removed temporarily for debugging AttributeError
-        # sqlite_db.initialize(new_db_pool)
-        # await sqlite_db.db.initialize()  # Initialize the database instance
+        sqlite_db.initialize(new_db_pool)
+        await sqlite_db.db.initialize()
 
         # Initialize metrics collector
-        # Removed temporarily for debugging AttributeError
-        # metrics = MetricsCollector()
-        # metrics.start()
+        metrics = MetricsCollector()
+        await metrics.initialize()
+        runner_instance['metrics_collector'] = metrics
+        dp.bot_data['metrics_collector'] = metrics
 
-        # Store metrics_collector in the aiohttp application instance
-        # Removed temporarily for debugging AttributeError
-        # runner_instance['metrics_collector'] = metrics
-
-        # Create and store health check handler (still store in runner_instance for aiohttp access)
-        # Pass None for metrics temporarily
-        health_check_handler = create_health_check_handler(None)
+        # Create and store health check handler
+        health_check_handler = create_health_check_handler(metrics)
         runner_instance['health_check_handler'] = health_check_handler
         runner_instance.router.add_get('/health', health_check_handler)
 
@@ -184,44 +178,28 @@ async def on_shutdown(runner_instance: web.Application) -> None:
     try:
         logger.info("Shutting down application...")
 
-        # Stop metrics collection - retrieve from global app_resources (will be None if initialization commented out)
-        metrics_collector = app_resources.get('metrics_collector') # Still try to get from resources just in case
-        if metrics_collector:
-            # Check if cleanup method exists before calling
-            if hasattr(metrics_collector, 'cleanup') and callable(metrics_collector.cleanup):
-                await metrics_collector.cleanup()  # Use cleanup instead of stop to ensure proper cleanup
-                logger.info("Metrics collection stopped")
-            else:
-                 logger.warning("Metrics collector instance does not have a cleanup method.")
+        # Stop metrics collection
+        metrics_collector = runner_instance.get('metrics_collector')
+        if metrics_collector and hasattr(metrics_collector, 'cleanup'):
+            await metrics_collector.cleanup()
+            logger.info("Metrics collection stopped")
 
-        # Stop webhook if running (assuming webhook_handler is stored globally)
+        # Stop webhook if running
         global webhook_handler
-        if webhook_handler:
-            # Check if webhook_handler has a shutdown method before calling
-            if hasattr(webhook_handler, 'shutdown') and callable(webhook_handler.shutdown):
-                await webhook_handler.shutdown()
-                logger.info("Webhook server stopped")
-            else:
-                logger.warning("webhook_handler does not have a shutdown method.")
+        if webhook_handler and hasattr(webhook_handler, 'shutdown'):
+            await webhook_handler.shutdown()
+            logger.info("Webhook server stopped")
 
-        # Close database pool - retrieve from global app_resources (will be None if initialization commented out)
-        db_pool_instance = app_resources.get('db_pool') # Still try to get from resources just in case
-        if db_pool_instance:
-             # Check if close method exists before calling
-             if hasattr(db_pool_instance, 'close') and callable(db_pool_instance.close):
-                 await db_pool_instance.close()
-                 logger.info("Database pool closed")
-             else:
-                  logger.warning("Database pool instance does not have a close method.")
+        # Close database pool
+        db_pool_instance = runner_instance.get('db_pool')
+        if db_pool_instance and hasattr(db_pool_instance, 'close'):
+            await db_pool_instance.close()
+            logger.info("Database pool closed")
 
         # Close bot session
-        # Assuming 'bot' is accessible globally
-        global bot
-        if 'bot' in globals() and hasattr(bot, 'session') and hasattr(bot.session, 'close'):
-             await bot.session.close()
-             logger.info("Bot session closed")
-        else:
-             logger.warning("Bot or bot session not available for closing during shutdown.")
+        if bot and hasattr(bot, 'session'):
+            await bot.session.close()
+            logger.info("Bot session closed")
 
         logger.info("Application shutdown completed")
     except Exception as e:
@@ -295,6 +273,38 @@ async def setup_bot_commands(bot: Bot) -> None:
     except Exception as e:
         logger.error(f"Error setting up bot commands: {e}", exc_info=True)
         raise
+
+async def main() -> None:
+    # Initialize bot and application
+    bot = Bot(token=config.BOT_TOKEN)
+    application = web.Application.builder().bot(bot).build()
+    
+    # Initialize database and metrics after application is built
+    db = DatabasePool(
+        db_file=config.DB_FILE,
+        pool_size=config.DB_POOL_SIZE
+    )
+    await db.initialize()
+    metrics = MetricsCollector()
+    await metrics.initialize()
+    
+    # Store resources in application data
+    application.bot_data["db"] = db
+    application.bot_data["metrics"] = metrics
+    
+    # Add middleware
+    application.add_middleware(MetricsMiddleware(metrics))
+    
+    # Add handlers
+    setup_user_handlers(dp)
+    setup_catalog_handlers(dp)
+    setup_test_handlers(dp)
+    setup_admin_handlers(dp)
+    
+    # Start the bot
+    await application.initialize()
+    await application.start()
+    await application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     try:
