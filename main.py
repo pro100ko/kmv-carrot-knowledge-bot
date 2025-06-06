@@ -111,7 +111,6 @@ async def on_startup(runner_instance: web.Application) -> None:
 
         # Initialize metrics collector
         metrics = MetricsCollector()
-        await metrics.initialize()
         runner_instance['metrics_collector'] = metrics
 
         # Create and store health check handler
