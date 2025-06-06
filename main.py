@@ -118,21 +118,25 @@ async def on_startup(runner_instance: web.Application) -> None:
         runner_instance['health_check_handler'] = health_check_handler
         runner_instance.router.add_get('/health', health_check_handler)
 
-        # Create application with bot
-        application = web.Application.builder().bot(bot).build()
-        
-        # Store resources in application
-        application.bot_data['db_pool'] = new_db_pool
-        application.bot_data['metrics_collector'] = metrics
+        # Create Dispatcher and Application
+        dp = Dispatcher()
+        aiogram_application = dp.to_app(
+            bot=bot,
+            middleware=[
+                MetricsMiddleware(metrics),
+                ErrorHandlingMiddleware(),
+                StateManagementMiddleware(),
+                LoggingMiddleware(),
+                AdminAccessMiddleware(),
+                UserActivityMiddleware(),
+                RateLimitMiddleware(),
+            ],
+        )
 
-        # Register middleware
-        application.update.middleware(MetricsMiddleware(metrics))
-        application.update.middleware(ErrorHandlingMiddleware())
-        application.update.middleware(StateManagementMiddleware())
-        application.update.middleware(LoggingMiddleware())
-        application.update.middleware(AdminAccessMiddleware())
-        application.update.middleware(UserActivityMiddleware())
-        application.update.middleware(RateLimitMiddleware())
+        # Store resources in bot_data
+        aiogram_application.bot_data['db_pool'] = new_db_pool
+        aiogram_application.bot_data['metrics_collector'] = metrics
+
         logger.info("Middleware registered")
 
         # Setup webhook or polling based on environment
@@ -146,7 +150,16 @@ async def on_startup(runner_instance: web.Application) -> None:
                 raise ValueError("WEBHOOK_HOST or RENDER_EXTERNAL_URL must be set in production.")
 
             webhook_url = f"https://{webhook_host}{webhook_path}"
-            await setup_webhook(application, webhook_url, webhook_path)
+            await bot.set_webhook(url=webhook_url)
+
+            # Create SimpleRequestHandler and setup aiohttp application
+            request_handler = SimpleRequestHandler(
+                dispatcher=dp,
+                bot=bot, # Pass bot to handler
+                handle_in_background=True,
+            )
+            request_handler.register(runner_instance.router, path=webhook_path)
+            # setup_application(runner_instance, aiogram_application) # This might overwrite routes, let's register handler manually for now
             logger.info("Webhook setup completed.")
         else:
             await setup_polling(application)
@@ -155,13 +168,13 @@ async def on_startup(runner_instance: web.Application) -> None:
         await setup_bot_commands(bot)
 
         # Setup handlers
-        setup_user_handlers(application)
-        setup_catalog_handlers(application)
-        setup_test_handlers(application)
-        setup_admin_handlers(application)
+        setup_user_handlers(dp)
+        setup_catalog_handlers(dp)
+        setup_test_handlers(dp)
+        setup_admin_handlers(dp)
 
         # Store application in runner instance
-        runner_instance['application'] = application
+        runner_instance['aiogram_application'] = aiogram_application # Store aiogram application
 
         logger.info("Application startup completed successfully")
     except Exception as e:
