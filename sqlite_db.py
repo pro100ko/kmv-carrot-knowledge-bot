@@ -10,6 +10,7 @@ from enum import Enum
 import json
 import bcrypt
 from pathlib import Path
+import shutil
 
 from config import DB_FILE, DB_POOL_TIMEOUT, DB_BACKUP_DIR, DB_POOL_SIZE, DB_MIGRATIONS_DIR
 from utils.db_pool import with_connection
@@ -263,11 +264,12 @@ class Database:
         backup_file = os.path.join(DB_BACKUP_DIR, f"backup_{backup_time}.db")
         
         try:
-            async with self._pool.acquire() as conn:
-                # Create backup using SQLite's backup API
-                async with aiosqlite.connect(backup_file) as backup_conn:
-                    await conn.backup(backup_conn)
-                    
+            # Ensure all connections are closed
+            await self._pool.close()
+            
+            # Copy database file
+            shutil.copy2(DB_FILE, backup_file)
+            
             logger.info(f"Database backup created: {backup_file}")
         except Exception as e:
             logger.error(f"Failed to create database backup: {e}")

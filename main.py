@@ -98,17 +98,17 @@ async def on_startup(runner_instance: Any) -> None:
 
         # Store db_pool in both runner and dispatcher
         runner_instance['db_pool'] = new_db_pool
-        dp.data['db_pool'] = new_db_pool
+        bot.data['db_pool'] = new_db_pool
 
         # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
         await sqlite_db.db.initialize()  # Initialize the database instance
 
-        # Initialize metrics collector
+        # Store metrics collector
         metrics = MetricsCollector()  # Create new instance
         metrics.start()  # Start metrics collection
         runner_instance['metrics_collector'] = metrics
-        dp.data['metrics_collector'] = metrics
+        bot.data['metrics_collector'] = metrics
 
         # Create and store health check handler
         health_check_handler = create_health_check_handler(metrics)  # Use the new instance
@@ -127,7 +127,31 @@ async def on_startup(runner_instance: Any) -> None:
 
         # Setup webhook or polling based on environment
         if config.IS_PRODUCTION:
-            await setup_webhook(bot, dp, config.WEBHOOK_URL, config.WEBHOOK_PATH)
+            logger.info("Setting up webhook in production mode...")
+            # Get webhook details directly from environment variables
+            webhook_host = os.getenv("WEBHOOK_HOST") or os.getenv("RENDER_EXTERNAL_URL")
+            # Use config.BOT_TOKEN here as it should be loaded by now
+            webhook_path = os.getenv("WEBHOOK_PATH", f"/webhook/{config.BOT_TOKEN}")
+            
+            if not webhook_host:
+                 logger.error("WEBHOOK_HOST or RENDER_EXTERNAL_URL environment variable is not set. Cannot set up webhook.")
+                 # Depending on desired behavior, could raise an error or fallback to polling
+                 # For now, raising an error to be explicit about the configuration issue
+                 raise ValueError("WEBHOOK_HOST or RENDER_EXTERNAL_URL must be set in production.")
+
+            webhook_url = f"https://{webhook_host}{webhook_path}" if webhook_host else None
+            
+            logger.info(f"Webhook Host: {webhook_host}")
+            logger.info(f"Webhook Path: {webhook_path}")
+            logger.info(f"Constructed Webhook URL: {webhook_url}")
+
+            if not webhook_url:
+                logger.error("Constructed WEBHOOK_URL is None. Cannot set up webhook.")
+                 # Optionally, raise an error or switch to polling
+                raise ValueError("Constructed WEBHOOK_URL is None.")
+
+            await setup_webhook(bot, dp, webhook_url, webhook_path)
+            logger.info("Webhook setup attempted.")
         else:
             await setup_polling(dp)
 
@@ -290,21 +314,43 @@ if __name__ == "__main__":
                 logger.error(f"Error in polling mode: {e}", exc_info=True)
             finally:
                 # Run cleanup
-                loop.run_until_complete(on_shutdown(None))
+                logger.info("Starting polling mode cleanup...")
+
                 # Explicitly close db_pool if it was created
-                db_pool_instance = dp.data.get('db_pool')
+                db_pool_instance = bot.data.get('db_pool')
                 if db_pool_instance:
                     try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            loop.create_task(db_pool_instance.close())
-                        else:
-                            loop.run_until_complete(db_pool_instance.close())
+                        # Use the existing loop to run the async cleanup
+                        loop.run_until_complete(db_pool_instance.close())
+                        logger.info("Database pool closed in polling cleanup")
                     except Exception as db_cleanup_error:
                         logger.error(f"Error closing db_pool in polling finally: {db_cleanup_error}", exc_info=True)
 
-                loop.close()
-                logger.info("Bot stopped.")
+                # Explicitly stop metrics collector if it was created
+                metrics_collector_instance = bot.data.get('metrics_collector')
+                if metrics_collector_instance:
+                    try:
+                         # Use the existing loop to run the async cleanup
+                        loop.run_until_complete(metrics_collector_instance.cleanup())
+                        logger.info("Metrics collector stopped in polling cleanup")
+                    except Exception as metrics_cleanup_error:
+                        logger.error(f"Error stopping metrics collector in polling finally: {metrics_cleanup_error}", exc_info=True)
+
+                # Explicitly close bot session
+                if bot and bot.session and not bot.session.closed:
+                    try:
+                        loop.run_until_complete(bot.session.close())
+                        logger.info("Bot session closed in polling cleanup")
+                    except Exception as bot_cleanup_error:
+                        logger.error(f"Error closing bot session in polling finally: {bot_cleanup_error}", exc_info=True)
+
+                # Close the event loop
+                if not loop.is_closed():
+                    loop.close()
+                    logger.info("Event loop closed in polling cleanup.")
+
+                logger.info("Polling mode cleanup completed.")
+
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
         # Run cleanup in case of error
@@ -318,7 +364,7 @@ if __name__ == "__main__":
             logger.error(f"Error during cleanup: {cleanup_error}", exc_info=True)
         finally:
             # Explicitly close db_pool if it was created
-            db_pool_instance = dp.data.get('db_pool')
+            db_pool_instance = bot.data.get('db_pool')
             if db_pool_instance:
                 try:
                     loop = asyncio.get_event_loop()
