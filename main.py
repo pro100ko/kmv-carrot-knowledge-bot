@@ -291,6 +291,18 @@ if __name__ == "__main__":
             finally:
                 # Run cleanup
                 loop.run_until_complete(on_shutdown(None))
+                # Explicitly close db_pool if it was created
+                db_pool_instance = dp.data.get('db_pool')
+                if db_pool_instance:
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(db_pool_instance.close())
+                        else:
+                            loop.run_until_complete(db_pool_instance.close())
+                    except Exception as db_cleanup_error:
+                        logger.error(f"Error closing db_pool in polling finally: {db_cleanup_error}", exc_info=True)
+
                 loop.close()
                 logger.info("Bot stopped.")
     except Exception as e:
@@ -305,6 +317,18 @@ if __name__ == "__main__":
         except Exception as cleanup_error:
             logger.error(f"Error during cleanup: {cleanup_error}", exc_info=True)
         finally:
+            # Explicitly close db_pool if it was created
+            db_pool_instance = dp.data.get('db_pool')
+            if db_pool_instance:
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(db_pool_instance.close())
+                    else:
+                        loop.run_until_complete(db_pool_instance.close())
+                except Exception as db_cleanup_error:
+                    logger.error(f"Error closing db_pool in final cleanup: {db_cleanup_error}", exc_info=True)
+            
             if not loop.is_closed():
                 loop.close()
             sys.exit(1)
