@@ -83,7 +83,7 @@ app = web.Application()
 # Store webhook handler for cleanup
 webhook_handler: Optional[SimpleRequestHandler] = None
 
-async def on_startup(runner_instance: Any) -> None:
+async def on_startup(runner_instance: web.Application) -> None:
     """Initialize application resources and start services."""
     logger.info("Entering on_startup function.")
     try:
@@ -96,7 +96,9 @@ async def on_startup(runner_instance: Any) -> None:
         )
         await new_db_pool.initialize()  # Initialize the pool first
 
-        # Store db_pool in bot context for easy access in handlers
+        # Store db_pool in the aiohttp application instance
+        runner_instance['db_pool'] = new_db_pool
+        # Also store in dp.data for potential handler access patterns
         dp.data['db_pool'] = new_db_pool
 
         # Initialize sqlite_db with the new pool
@@ -107,13 +109,15 @@ async def on_startup(runner_instance: Any) -> None:
         metrics = MetricsCollector()
         metrics.start()
 
-        # Store metrics_collector in bot context
+        # Store metrics_collector in the aiohttp application instance
+        runner_instance['metrics_collector'] = metrics
+        # Also store in dp.data for potential handler access patterns
         dp.data['metrics_collector'] = metrics
 
         # Create and store health check handler
         health_check_handler = create_health_check_handler(metrics)
         runner_instance['health_check_handler'] = health_check_handler
-        app.router.add_get('/health', health_check_handler)
+        runner_instance.router.add_get('/health', health_check_handler)
 
         # Register middleware
         dp.update.middleware(MetricsMiddleware())
@@ -169,34 +173,44 @@ async def on_startup(runner_instance: Any) -> None:
         logger.error(f"Error during startup: {e}", exc_info=True)
         raise
 
-async def on_shutdown(runner_instance: Any) -> None:
+async def on_shutdown(runner_instance: web.Application) -> None:
     """Clean up application resources."""
     logger.info("Entering on_shutdown function.")
     try:
         logger.info("Shutting down application...")
-        
-        # Stop metrics collection
+
+        # Stop metrics collection - retrieve from aiohttp app instance
         metrics_collector = runner_instance.get('metrics_collector')
         if metrics_collector:
             await metrics_collector.cleanup()  # Use cleanup instead of stop to ensure proper cleanup
             logger.info("Metrics collection stopped")
-        
-        # Stop webhook if running
+
+        # Stop webhook if running (assuming webhook_handler is stored globally or in app instance if needed)
+        # For now, relying on global webhook_handler as per current code structure
         global webhook_handler
         if webhook_handler:
-            await webhook_handler.shutdown()
-            logger.info("Webhook server stopped")
-        
-        # Close database pool
+            # Check if webhook_handler has a shutdown method before calling
+            if hasattr(webhook_handler, 'shutdown') and callable(webhook_handler.shutdown):
+                await webhook_handler.shutdown()
+                logger.info("Webhook server stopped")
+            else:
+                logger.warning("webhook_handler does not have a shutdown method.")
+
+        # Close database pool - retrieve from aiohttp app instance
         db_pool_instance = runner_instance.get('db_pool')
         if db_pool_instance:
             await db_pool_instance.close()
             logger.info("Database pool closed")
-        
+
         # Close bot session
-        await bot.session.close()
-        logger.info("Bot session closed")
-        
+        # Assuming 'bot' is accessible globally or via runner_instance if needed
+        # For now, relying on global 'bot' as per current code structure
+        if 'bot' in globals() and hasattr(bot, 'session') and hasattr(bot.session, 'close'):
+             await bot.session.close()
+             logger.info("Bot session closed")
+        else:
+             logger.warning("Bot or bot session not available for closing during shutdown.")
+
         logger.info("Application shutdown completed")
     except Exception as e:
         logger.error(f"Error during shutdown: {e}", exc_info=True)
