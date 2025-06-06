@@ -271,8 +271,11 @@ if __name__ == "__main__":
         # Setup logging
         setup_logging()
         
+        # Create new event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
         # Set up exception handler
-        loop = asyncio.get_event_loop()
         loop.set_exception_handler(handle_exception)
         
         # Get host and port
@@ -286,17 +289,24 @@ if __name__ == "__main__":
         if config.ENABLE_WEBHOOK:
             # Use asyncio.run for the main entry point in webhook mode
             logger.info("Starting aiohttp web server with asyncio.run...")
-            asyncio.run(web.run_app(
-                app,
-                host=run_host,
-                port=run_port,
-                ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None
-            ))
-            logger.info("Web server stopped.")
+            try:
+                asyncio.run(web.run_app(
+                    app,
+                    host=run_host,
+                    port=run_port,
+                    ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None
+                ))
+                logger.info("Web server stopped.")
+            except Exception as e:
+                logger.error(f"Error running web application: {e}", exc_info=True)
+                raise
         else:
             # In polling mode, we need to run the dispatcher directly
             logger.info("Starting bot in polling mode...")
             try:
+                # Create dispatcher
+                dp = Dispatcher()
+                
                 # Start polling in the background
                 loop.create_task(dp.start_polling(
                     allowed_updates=["message", "callback_query", "inline_query"],
@@ -311,68 +321,47 @@ if __name__ == "__main__":
             finally:
                 # Run cleanup
                 logger.info("Starting polling mode cleanup...")
+                try:
+                    # Get resources from application
+                    db_pool_instance = app.get('db_pool')
+                    metrics_collector_instance = app.get('metrics_collector')
 
-                # Access instances from dp.data (used bot.data previously but it caused AttributeError)
-                db_pool_instance = dp.data.get('db_pool')
-                metrics_collector_instance = dp.data.get('metrics_collector')
+                    # Cleanup resources
+                    if db_pool_instance:
+                        try:
+                            loop.run_until_complete(db_pool_instance.close())
+                            logger.info("Database pool closed in polling cleanup")
+                        except Exception as db_cleanup_error:
+                            logger.error(f"Error closing db_pool in polling finally: {db_cleanup_error}", exc_info=True)
 
-                # Explicitly close db_pool if it was created
-                if db_pool_instance:
+                    if metrics_collector_instance:
+                        try:
+                            loop.run_until_complete(metrics_collector_instance.cleanup())
+                            logger.info("Metrics collector stopped in polling cleanup")
+                        except Exception as metrics_cleanup_error:
+                            logger.error(f"Error stopping metrics collector in polling finally: {metrics_cleanup_error}", exc_info=True)
+
+                    # Close bot session
+                    if bot and bot.session and not bot.session.closed:
+                        try:
+                            loop.run_until_complete(bot.session.close())
+                            logger.info("Bot session closed in polling cleanup")
+                        except Exception as bot_cleanup_error:
+                            logger.error(f"Error closing bot session in polling finally: {bot_cleanup_error}", exc_info=True)
+
+                except Exception as cleanup_error:
+                    logger.error(f"Error during cleanup: {cleanup_error}", exc_info=True)
+                finally:
+                    # Close the event loop
                     try:
-                        # Use the existing loop to run the async cleanup
-                        loop.run_until_complete(db_pool_instance.close())
-                        logger.info("Database pool closed in polling cleanup")
-                    except Exception as db_cleanup_error:
-                        logger.error(f"Error closing db_pool in polling finally: {db_cleanup_error}", exc_info=True)
-
-                # Explicitly stop metrics collector if it was created
-                if metrics_collector_instance:
-                    try:
-                         # Use the existing loop to run the async cleanup
-                        loop.run_until_complete(metrics_collector_instance.cleanup())
-                        logger.info("Metrics collector stopped in polling cleanup")
-                    except Exception as metrics_cleanup_error:
-                        logger.error(f"Error stopping metrics collector in polling finally: {metrics_cleanup_error}", exc_info=True)
-
-                # Explicitly close bot session
-                if bot and bot.session and not bot.session.closed:
-                    try:
-                        loop.run_until_complete(bot.session.close())
-                        logger.info("Bot session closed in polling cleanup")
-                    except Exception as bot_cleanup_error:
-                        logger.error(f"Error closing bot session in polling finally: {bot_cleanup_error}", exc_info=True)
-
-                # Close the event loop
-                if not loop.is_closed():
-                    loop.close()
-                    logger.info("Event loop closed in polling cleanup.")
+                        if not loop.is_closed():
+                            loop.close()
+                            logger.info("Event loop closed in polling cleanup.")
+                    except Exception as loop_error:
+                        logger.error(f"Error closing event loop: {loop_error}", exc_info=True)
 
                 logger.info("Polling mode cleanup completed.")
 
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
-        # Run cleanup in case of error
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(on_shutdown(None))
-            else:
-                loop.run_until_complete(on_shutdown(None))
-        except Exception as cleanup_error:
-            logger.error(f"Error during cleanup: {cleanup_error}", exc_info=True)
-        finally:
-            # Explicitly close db_pool if it was created
-            db_pool_instance = dp.data.get('db_pool')
-            if db_pool_instance:
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        loop.create_task(db_pool_instance.close())
-                    else:
-                        loop.run_until_complete(db_pool_instance.close())
-                except Exception as db_cleanup_error:
-                    logger.error(f"Error closing db_pool in final cleanup: {db_cleanup_error}", exc_info=True)
-            
-            if not loop.is_closed():
-                loop.close()
-            sys.exit(1)
+        sys.exit(1)

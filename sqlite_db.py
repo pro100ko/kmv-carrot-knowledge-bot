@@ -280,10 +280,12 @@ class Database:
                     )
                 """)
                 
-                version_row = await conn.execute_one(
-                    "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
-                )
-                current_version = version_row["version"] if version_row else 0
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
+                    )
+                    version_row = await cursor.fetchone()
+                    current_version = version_row[0] if version_row else 0
 
             # Get all migration files
             migration_files = sorted([
