@@ -143,11 +143,11 @@ async def on_startup(runner_instance: Any) -> None:
 
         # Initialize database pool
         new_db_pool = DatabasePool(
-            db_path=config.DB_PATH,
-            max_connections=config.DB_MAX_CONNECTIONS,
-            timeout=config.DB_TIMEOUT
-        )
-        await new_db_pool.initialize()  # Initialize the pool first
+        db_path=config.DB_PATH,
+        max_connections=config.DB_MAX_CONNECTIONS,
+        timeout=config.DB_TIMEOUT
+    )
+            await new_db_pool.initialize()  # Initialize the pool first
 
         # Store db_pool in both runner and dispatcher
         runner_instance['db_pool'] = new_db_pool
@@ -155,7 +155,7 @@ async def on_startup(runner_instance: Any) -> None:
 
         # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
-        await sqlite_db.db.initialize()  # Initialize the database instance
+            await sqlite_db.db.initialize()  # Initialize the database instance
 
         # Initialize metrics collector
         metrics = MetricsCollector()  # Create new instance
