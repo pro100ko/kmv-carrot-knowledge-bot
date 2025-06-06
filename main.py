@@ -15,7 +15,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command
-from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
+from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat, Update
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 
@@ -70,15 +70,11 @@ logger = logging.getLogger(__name__)
 
 logger.info(f"Environment: {config.ENVIRONMENT}, IS_PRODUCTION: {config.IS_PRODUCTION}")
 
-# Initialize bot and dispatcher
+# Initialize bot
 bot = Bot(
     token=config.BOT_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
-dp = Dispatcher()
-
-# Global dictionary to store application resources
-app_resources: Dict[str, Any] = {}
 
 # Create web application
 app = web.Application()
@@ -99,9 +95,8 @@ async def on_startup(runner_instance: web.Application) -> None:
         )
         await new_db_pool.initialize()
 
-        # Store db_pool in the application instance and bot_data
+        # Store db_pool in the application instance
         runner_instance['db_pool'] = new_db_pool
-        dp.bot_data['db_pool'] = new_db_pool
 
         # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
@@ -111,61 +106,56 @@ async def on_startup(runner_instance: web.Application) -> None:
         metrics = MetricsCollector()
         await metrics.initialize()
         runner_instance['metrics_collector'] = metrics
-        dp.bot_data['metrics_collector'] = metrics
 
         # Create and store health check handler
         health_check_handler = create_health_check_handler(metrics)
         runner_instance['health_check_handler'] = health_check_handler
         runner_instance.router.add_get('/health', health_check_handler)
 
+        # Create application with bot
+        application = web.Application.builder().bot(bot).build()
+        
+        # Store resources in application
+        application.bot_data['db_pool'] = new_db_pool
+        application.bot_data['metrics_collector'] = metrics
+
         # Register middleware
-        dp.update.middleware(MetricsMiddleware())
-        dp.update.middleware(ErrorHandlingMiddleware())
-        dp.update.middleware(StateManagementMiddleware())
-        dp.update.middleware(LoggingMiddleware())
-        dp.update.middleware(AdminAccessMiddleware())
-        dp.update.middleware(UserActivityMiddleware())
-        dp.update.middleware(RateLimitMiddleware())
+        application.update.middleware(MetricsMiddleware(metrics))
+        application.update.middleware(ErrorHandlingMiddleware())
+        application.update.middleware(StateManagementMiddleware())
+        application.update.middleware(LoggingMiddleware())
+        application.update.middleware(AdminAccessMiddleware())
+        application.update.middleware(UserActivityMiddleware())
+        application.update.middleware(RateLimitMiddleware())
         logger.info("Middleware registered")
 
         # Setup webhook or polling based on environment
         if config.IS_PRODUCTION:
             logger.info("Setting up webhook in production mode...")
-            # Get webhook details directly from environment variables
             webhook_host = os.getenv("WEBHOOK_HOST") or os.getenv("RENDER_EXTERNAL_URL")
-            # Use config.BOT_TOKEN here as it should be loaded by now
             webhook_path = os.getenv("WEBHOOK_PATH", f"/webhook/{config.BOT_TOKEN}")
             
             if not webhook_host:
-                 logger.error("WEBHOOK_HOST or RENDER_EXTERNAL_URL environment variable is not set. Cannot set up webhook.")
-                 # Depending on desired behavior, could raise an error or fallback to polling
-                 # For now, raising an error to be explicit about the configuration issue
-                 raise ValueError("WEBHOOK_HOST or RENDER_EXTERNAL_URL must be set in production.")
+                logger.error("WEBHOOK_HOST or RENDER_EXTERNAL_URL environment variable is not set.")
+                raise ValueError("WEBHOOK_HOST or RENDER_EXTERNAL_URL must be set in production.")
 
-            webhook_url = f"https://{webhook_host}{webhook_path}" if webhook_host else None
-            
-            logger.info(f"Webhook Host: {webhook_host}")
-            logger.info(f"Webhook Path: {webhook_path}")
-            logger.info(f"Constructed Webhook URL: {webhook_url}")
-
-            if not webhook_url:
-                logger.error("Constructed WEBHOOK_URL is None. Cannot set up webhook.")
-                 # Optionally, raise an error or switch to polling
-                raise ValueError("Constructed WEBHOOK_URL is None.")
-
-            await setup_webhook(bot, dp, webhook_url, webhook_path)
-            logger.info("Webhook setup attempted.")
+            webhook_url = f"https://{webhook_host}{webhook_path}"
+            await setup_webhook(application, webhook_url, webhook_path)
+            logger.info("Webhook setup completed.")
         else:
-            await setup_polling(dp)
+            await setup_polling(application)
 
         # Setup bot commands
         await setup_bot_commands(bot)
 
         # Setup handlers
-        setup_user_handlers(dp)
-        setup_catalog_handlers(dp)
-        setup_test_handlers(dp)
-        setup_admin_handlers(dp)
+        setup_user_handlers(application)
+        setup_catalog_handlers(application)
+        setup_test_handlers(application)
+        setup_admin_handlers(application)
+
+        # Store application in runner instance
+        runner_instance['application'] = application
 
         logger.info("Application startup completed successfully")
     except Exception as e:
@@ -177,6 +167,11 @@ async def on_shutdown(runner_instance: web.Application) -> None:
     logger.info("Entering on_shutdown function.")
     try:
         logger.info("Shutting down application...")
+
+        # Get application instance
+        application = runner_instance.get('application')
+        if application:
+            await application.shutdown()
 
         # Stop metrics collection
         metrics_collector = runner_instance.get('metrics_collector')
@@ -273,38 +268,6 @@ async def setup_bot_commands(bot: Bot) -> None:
     except Exception as e:
         logger.error(f"Error setting up bot commands: {e}", exc_info=True)
         raise
-
-async def main() -> None:
-    # Initialize bot and application
-    bot = Bot(token=config.BOT_TOKEN)
-    application = web.Application.builder().bot(bot).build()
-    
-    # Initialize database and metrics after application is built
-    db = DatabasePool(
-        db_file=config.DB_FILE,
-        pool_size=config.DB_POOL_SIZE
-    )
-    await db.initialize()
-    metrics = MetricsCollector()
-    await metrics.initialize()
-    
-    # Store resources in application data
-    application.bot_data["db"] = db
-    application.bot_data["metrics"] = metrics
-    
-    # Add middleware
-    application.add_middleware(MetricsMiddleware(metrics))
-    
-    # Add handlers
-    setup_user_handlers(dp)
-    setup_catalog_handlers(dp)
-    setup_test_handlers(dp)
-    setup_admin_handlers(dp)
-    
-    # Start the bot
-    await application.initialize()
-    await application.start()
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     try:

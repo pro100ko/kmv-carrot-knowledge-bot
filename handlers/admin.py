@@ -1,4 +1,4 @@
-from aiogram import F, types
+from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 import uuid
@@ -30,6 +30,9 @@ from datetime import datetime, timedelta
 # from main import app_resources
 
 logger = logging.getLogger(__name__)
+
+# Create router for admin handlers
+router = Router()
 
 # ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
 async def check_admin_access(user_id: int, query: types.CallbackQuery = None) -> bool:
@@ -82,57 +85,23 @@ async def send_admin_menu(
         )
 
 # ===== ОСНОВНЫЕ ОБРАБОТЧИКИ =====
-@dp.callback_query()
-async def debug_callback_handler(query: types.CallbackQuery):
-    logger.info(f"DEBUG: Received callback query: {query.data} from user {query.from_user.id}")
-    await query.answer("Неизвестная команда", show_alert=True)
-    return False  # Continue to other handlers
+@router.callback_query()
+async def debug_callback_handler(query: CallbackQuery):
+    """Debug handler for callback queries."""
+    logger.debug(f"Callback query: {query.data}")
 
-@dp.message(Command("admin"))
-@dp.callback_query(F.data == "admin")
-async def admin_handler(update: types.Message | types.CallbackQuery, state: FSMContext) -> None:
-    """Главное меню админки"""
-    try:
-        user_id = update.from_user.id
-        if not await check_admin_access(user_id, update if isinstance(update, types.CallbackQuery) else None):
-            return
-        logger.info(f"Admin menu opened by user {user_id}")
-        await safe_clear_state(state)
-        # Create keyboard with unified callback data
-        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-            [
-                types.InlineKeyboardButton(text="📂 Категории", callback_data="category:list"),
-                types.InlineKeyboardButton(text="🍎 Товары", callback_data="product:list")
-            ],
-            [
-                types.InlineKeyboardButton(text="📝 Тесты", callback_data="test:list"),
-                types.InlineKeyboardButton(text="📊 Статистика", callback_data="stats:list")
-            ],
-            [types.InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
-        ])
-        text = "🔧 <b>Административная панель</b>\n\nВыберите раздел для управления:"
-        if isinstance(update, types.CallbackQuery):
-            await update.answer()
-            await safe_edit_message(
-                message=update.message,
-                text=text,
-                parse_mode=ParseMode.HTML,
-                reply_markup=keyboard
-            )
-        else:
-            await update.answer(
-                text=text,
-                parse_mode=ParseMode.HTML,
-                reply_markup=keyboard
-            )
-    except Exception as e:
-        logger.error(f"Error in admin_handler: {e}", exc_info=True)
-        if isinstance(update, types.CallbackQuery):
-            await update.answer("Произошла ошибка", show_alert=True)
+@router.message(Command("admin"))
+@router.callback_query(F.data == "admin")
+async def admin_handler(update: Message | CallbackQuery, state: FSMContext) -> None:
+    """Handle admin panel access."""
+    if not await check_admin_access(update.from_user.id, update if isinstance(update, CallbackQuery) else None):
+        return
+    
+    await send_admin_menu(update)
 
 # ===== КАТЕГОРИИ =====
-@dp.callback_query(F.data == "admin_categories")
-async def admin_categories_handler(query: types.CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(F.data == "admin_categories")
+async def admin_categories_handler(query: CallbackQuery, state: FSMContext) -> None:
     """Управление категориями"""
     try:
         if not await check_admin_access(query.from_user.id, query):
@@ -176,9 +145,9 @@ async def admin_categories_handler(query: types.CallbackQuery, state: FSMContext
         logger.error(f"Error in admin_categories_handler: {e}", exc_info=True)
         await query.answer("Произошла ошибка при загрузке категорий", show_alert=True)
 
-@dp.callback_query(F.data == "create_category")
+@router.callback_query(F.data == "create_category")
 async def create_category_handler(
-    callback: types.CallbackQuery,
+    callback: CallbackQuery,
     state: FSMContext
 ) -> None:
     """Создание новой категории"""
@@ -198,9 +167,9 @@ async def create_category_handler(
         logger.error(f"Error in create_category_handler: {e}", exc_info=True)
         await callback.answer("Произошла ошибка при создании категории", show_alert=True)
 
-@dp.callback_query(F.data.startswith("admin_category_edit:"))
+@router.callback_query(F.data.startswith("admin_category_edit:"))
 async def admin_category_edit_handler(
-    query: types.CallbackQuery,
+    query: CallbackQuery,
     state: FSMContext
 ) -> None:
     """Редактирование категории"""
@@ -229,9 +198,9 @@ async def admin_category_edit_handler(
         logger.error(f"Error in admin_category_edit_handler: {e}", exc_info=True)
         await query.answer("Произошла ошибка при редактировании категории", show_alert=True)
 
-@dp.callback_query(F.data.startswith("admin_category_delete:"))
+@router.callback_query(F.data.startswith("admin_category_delete:"))
 async def admin_category_delete_handler(
-    query: types.CallbackQuery,
+    query: CallbackQuery,
     state: FSMContext
 ) -> None:
     """Удаление категории"""
@@ -274,8 +243,8 @@ async def admin_category_delete_handler(
         await query.answer("Произошла ошибка при удалении категории", show_alert=True)
 
 # ===== ТОВАРЫ =====
-@dp.callback_query(F.data == "admin_products")
-async def admin_products_handler(query: types.CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(F.data == "admin_products")
+async def admin_products_handler(query: CallbackQuery, state: FSMContext) -> None:
     """Управление товарами"""
     try:
         if not await check_admin_access(query.from_user.id, query):
@@ -319,9 +288,9 @@ async def admin_products_handler(query: types.CallbackQuery, state: FSMContext) 
         logger.error(f"Error in admin_products_handler: {e}", exc_info=True)
         await query.answer("Произошла ошибка при загрузке меню товаров", show_alert=True)
 
-@dp.callback_query(F.data.startswith("admin_products_category:"))
+@router.callback_query(F.data.startswith("admin_products_category:"))
 async def admin_products_category_handler(
-    query: types.CallbackQuery,
+    query: CallbackQuery,
     state: FSMContext
 ) -> None:
     """Показ товаров конкретной категории"""
@@ -356,9 +325,9 @@ async def admin_products_category_handler(
         logger.error(f"Error in admin_products_category_handler: {e}", exc_info=True)
         await query.answer("Произошла ошибка при загрузке товаров", show_alert=True)
 
-@dp.callback_query(F.data.startswith("create_product:"))
+@router.callback_query(F.data.startswith("create_product:"))
 async def create_product_handler(
-    callback: types.CallbackQuery,
+    callback: CallbackQuery,
     state: FSMContext
 ) -> None:
     """Создание нового товара"""
@@ -382,9 +351,9 @@ async def create_product_handler(
         logger.error(f"Error in create_product_handler: {e}", exc_info=True)
         await callback.answer("Произошла ошибка при создании товара", show_alert=True)
 
-@dp.callback_query(F.data.startswith("admin_product_edit:"))
+@router.callback_query(F.data.startswith("admin_product_edit:"))
 async def admin_product_edit_handler(
-    query: types.CallbackQuery,
+    query: CallbackQuery,
     state: FSMContext
 ) -> None:
     """Редактирование товара"""
@@ -413,9 +382,9 @@ async def admin_product_edit_handler(
         logger.error(f"Error in admin_product_edit_handler: {e}", exc_info=True)
         await query.answer("Произошла ошибка при редактировании товара", show_alert=True)
 
-@dp.callback_query(F.data.startswith("admin_product_delete:"))
+@router.callback_query(F.data.startswith("admin_product_delete:"))
 async def admin_product_delete_handler(
-    query: types.CallbackQuery,
+    query: CallbackQuery,
     state: FSMContext
 ) -> None:
     """Удаление товара"""
@@ -448,8 +417,8 @@ async def admin_product_delete_handler(
         await query.answer("Произошла ошибка при удалении товара", show_alert=True)
 
 # ===== ТЕСТЫ =====
-@dp.callback_query(F.data == "admin_tests")
-async def admin_tests_handler(query: types.CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(F.data == "admin_tests")
+async def admin_tests_handler(query: CallbackQuery, state: FSMContext) -> None:
     """Управление тестами"""
     try:
         if not await check_admin_access(query.from_user.id, query):
@@ -493,9 +462,9 @@ async def admin_tests_handler(query: types.CallbackQuery, state: FSMContext) -> 
         logger.error(f"Error in admin_tests_handler: {e}", exc_info=True)
         await query.answer("Произошла ошибка при загрузке тестов", show_alert=True)
 
-@dp.callback_query(F.data.startswith("admin_test_edit:"))
+@router.callback_query(F.data.startswith("admin_test_edit:"))
 async def admin_test_edit_handler(
-    query: types.CallbackQuery,
+    query: CallbackQuery,
     state: FSMContext
 ) -> None:
     """Редактирование теста"""
@@ -524,9 +493,9 @@ async def admin_test_edit_handler(
         logger.error(f"Error in admin_test_edit_handler: {e}", exc_info=True)
         await query.answer("Произошла ошибка при редактировании теста", show_alert=True)
 
-@dp.callback_query(F.data.startswith("admin_test_delete:"))
+@router.callback_query(F.data.startswith("admin_test_delete:"))
 async def admin_test_delete_handler(
-    query: types.CallbackQuery,
+    query: CallbackQuery,
     state: FSMContext
 ) -> None:
     """Удаление теста"""
@@ -558,9 +527,9 @@ async def admin_test_delete_handler(
         logger.error(f"Error in admin_test_delete_handler: {e}", exc_info=True)
         await query.answer("Произошла ошибка при удалении теста", show_alert=True)
 
-@dp.callback_query(F.data == "create_test")
+@router.callback_query(F.data == "create_test")
 async def create_test_handler(
-    query: types.CallbackQuery,
+    query: CallbackQuery,
     state: FSMContext
 ) -> None:
     """Создание нового теста"""
@@ -581,8 +550,8 @@ async def create_test_handler(
         await query.answer("Произошла ошибка при создании теста", show_alert=True)
 
 # ===== СТАТИСТИКА =====
-@dp.callback_query(F.data == "admin_stats")
-async def admin_stats_handler(query: types.CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(F.data == "admin_stats")
+async def admin_stats_handler(query: CallbackQuery, state: FSMContext) -> None:
     """Просмотр статистики"""
     try:
         if not await check_admin_access(query.from_user.id, query):
@@ -613,9 +582,9 @@ async def admin_stats_handler(query: types.CallbackQuery, state: FSMContext) -> 
         await query.answer("Произошла ошибка при загрузке статистики", show_alert=True)
 
 # ===== ПОИСК ТОВАРОВ =====
-@dp.callback_query(F.data == "admin_search_products")
+@router.callback_query(F.data == "admin_search_products")
 async def admin_search_products_handler(
-    query: types.CallbackQuery,
+    query: CallbackQuery,
     state: FSMContext
 ) -> None:
     """Поиск товаров"""
@@ -630,9 +599,9 @@ async def admin_search_products_handler(
         reply_markup=get_cancel_keyboard("cancel_search")
     )
 
-@dp.message(ProductForm.search)
+@router.message(ProductForm.search)
 async def process_product_search(
-    message: types.Message,
+    message: Message,
     state: FSMContext
 ) -> None:
     """Обработка поискового запроса"""
@@ -657,7 +626,7 @@ async def process_product_search(
     await message.answer(text, parse_mode=ParseMode.HTML)
     await safe_clear_state(state)
 
-@dp.message(CategoryForm.name)
+@router.message(CategoryForm.name)
 async def process_name(message: Message, state: FSMContext):
     """Обработка ввода названия категории"""
     if not await check_admin_access(message.from_user.id):
@@ -678,9 +647,9 @@ async def process_name(message: Message, state: FSMContext):
     await safe_clear_state(state)
 
 # ===== ОТМЕНА ДЕЙСТВИЙ =====
-@dp.callback_query(F.data.startswith("cancel_"))
+@router.callback_query(F.data.startswith("cancel_"))
 async def cancel_handler(
-    query: types.CallbackQuery,
+    query: CallbackQuery,
     state: FSMContext
 ) -> None:
     """Отмена текущего действия"""
@@ -712,8 +681,8 @@ def is_admin(user_id: int) -> bool:
     """Check if user is an admin."""
     return user_id in ADMIN_IDS
 
-@dp.message(Command("admin"))
-@dp.message(F.text == "⚙️ Управление")
+@router.message(Command("admin"))
+@router.message(F.text == "⚙️ Управление")
 async def show_admin_panel(message: Message, state: FSMContext):
     """Show admin control panel."""
     if not is_admin(message.from_user.id):
@@ -738,15 +707,11 @@ async def show_admin_panel(message: Message, state: FSMContext):
             reply_markup=get_back_keyboard()
         )
 
-@dp.callback_query(F.data == "admin_users")
+@router.callback_query(F.data == "admin_users")
 async def manage_users(callback: CallbackQuery, state: FSMContext):
-    """Show user management interface."""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Нет доступа")
-        return
-    
+    """Manage users handler."""
     try:
-        # Get db_pool from bot_data
+        # Get db_pool from application
         db_pool = callback.bot.bot_data.get('db_pool')
         if not db_pool:
             logger.error("Database pool not available in handler context.")
@@ -818,15 +783,11 @@ async def manage_users(callback: CallbackQuery, state: FSMContext):
             reply_markup=get_back_keyboard()
         )
 
-@dp.callback_query(F.data == "admin_catalog")
+@router.callback_query(F.data == "admin_catalog")
 async def manage_catalog(callback: CallbackQuery, state: FSMContext):
-    """Show catalog management interface."""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Нет доступа")
-        return
-    
+    """Manage catalog handler."""
     try:
-        # Get db_pool from bot_data
+        # Get db_pool from application
         db_pool = callback.bot.bot_data.get('db_pool')
         if not db_pool:
             logger.error("Database pool not available in handler context.")
@@ -890,15 +851,11 @@ async def manage_catalog(callback: CallbackQuery, state: FSMContext):
             reply_markup=get_back_keyboard()
         )
 
-@dp.callback_query(F.data == "admin_tests")
+@router.callback_query(F.data == "admin_tests")
 async def manage_tests(callback: CallbackQuery, state: FSMContext):
-    """Show test management interface."""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Нет доступа")
-        return
-    
+    """Manage tests handler."""
     try:
-        # Get db_pool from bot_data
+        # Get db_pool from application
         db_pool = callback.bot.bot_data.get('db_pool')
         if not db_pool:
             logger.error("Database pool not available in handler context.")
@@ -981,15 +938,11 @@ async def manage_tests(callback: CallbackQuery, state: FSMContext):
             reply_markup=get_back_keyboard()
         )
 
-@dp.callback_query(F.data == "admin_stats")
+@router.callback_query(F.data == "admin_stats")
 async def view_stats(callback: CallbackQuery, state: FSMContext):
-    """Show detailed bot statistics."""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Нет доступа")
-        return
-    
+    """View stats handler."""
     try:
-        # Get db_pool from bot_data
+        # Get db_pool from application
         db_pool = callback.bot.bot_data.get('db_pool')
         if not db_pool:
             logger.error("Database pool not available in handler context.")
@@ -1062,7 +1015,7 @@ async def view_stats(callback: CallbackQuery, state: FSMContext):
             reply_markup=get_back_keyboard()
         )
 
-@dp.callback_query(F.data == "admin_settings")
+@router.callback_query(F.data == "admin_settings")
 async def manage_settings(callback: CallbackQuery, state: FSMContext):
     """Show bot settings management interface."""
     if not is_admin(callback.from_user.id):
@@ -1107,15 +1060,15 @@ async def manage_settings(callback: CallbackQuery, state: FSMContext):
             reply_markup=get_back_keyboard()
         )
 
-@dp.callback_query(F.data == "back_to_main")
+@router.callback_query(F.data == "back_to_main")
 async def back_to_admin_panel(callback: CallbackQuery, state: FSMContext):
     """Return to admin panel."""
     await state.clear()
     await show_admin_panel(callback.message, state)
 
-async def setup_admin_handlers(dispatcher):
-    """Placeholder function to satisfy import requirements."""
-    pass
+def setup_admin_handlers(application):
+    """Setup admin handlers."""
+    application.include_router(router)
 
 __all__ = [
     'admin_handler',
