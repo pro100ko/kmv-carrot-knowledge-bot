@@ -87,66 +87,14 @@ async def on_startup(runner_instance: Any) -> None:
     """Initialize application resources and start services."""
     logger.info("Entering on_startup function.")
     try:
-
-# Initialize database pool
-        new_db_pool = DatabasePool(
-        db_path=config.DB_PATH,
-        max_connections=config.DB_MAX_CONNECTIONS,
-        timeout=config.DB_TIMEOUT
-    )
-        await new_db_pool.initialize()  # Initialize the pool first
-
-# Store db_pool in both runner and dispatcher
-        dp.data['db_pool'] = new_db_pool
-
-# Initialize sqlite_db with the new pool
-        sqlite_db.initialize(new_db_pool)
-        await sqlite_db.db.initialize()  # Initialize the database instance
-
-# Initialize metrics collector
-        metrics = MetricsCollector()  # Create new instance
-        metrics.start()  # Start metrics collection
-        dp.data['metrics_collector'] = metrics
-
-# Create and store health check handler
-        health_check_handler = create_health_check_handler(metrics)  # Use the new instance
-        app.router.add_get('/health', health_check_handler)
-
-# Register middleware
-        dp.update.middleware(MetricsMiddleware())
-        dp.update.middleware(ErrorHandlingMiddleware())
-        dp.update.middleware(StateManagementMiddleware())
-        dp.update.middleware(LoggingMiddleware())
-        dp.update.middleware(AdminAccessMiddleware())
-        dp.update.middleware(UserActivityMiddleware())
-        dp.update.middleware(RateLimitMiddleware())
-        logger.info("Middleware registered")
-
-# Setup webhook or polling based on environment
-    if config.IS_PRODUCTION:
-        await setup_webhook(bot, dp, config.WEBHOOK_URL, config.WEBHOOK_PATH)
-    else:
-        await setup_polling(dp)
-
-# Setup bot commands
-        await setup_bot_commands(bot)
-
-# Setup handlers
-        setup_user_handlers(dp)
-        setup_catalog_handlers(dp)
-        setup_test_handlers(dp)
-        setup_admin_handlers(dp)
-
-        logger.info("Application startup completed successfully")
-        
         logger.info("Starting up application...")
 
         # Initialize database pool
         new_db_pool = DatabasePool(
-        db_path=config.DB_PATH,
-        max_connections=config.DB_MAX_CONNECTIONS,
-        timeout=config.DB_TIMEOUT
-    )
+            db_path=config.DB_FILE,
+            max_connections=config.DB_MAX_CONNECTIONS,
+            timeout=config.DB_TIMEOUT
+        )
         await new_db_pool.initialize()  # Initialize the pool first
 
         # Store db_pool in both runner and dispatcher
