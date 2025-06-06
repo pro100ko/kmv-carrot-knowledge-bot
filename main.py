@@ -98,8 +98,6 @@ async def on_startup(runner_instance: web.Application) -> None:
 
         # Store db_pool in the aiohttp application instance
         runner_instance['db_pool'] = new_db_pool
-        # Also store in dp.data for potential handler access patterns
-        dp.data['db_pool'] = new_db_pool
 
         # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
@@ -111,8 +109,6 @@ async def on_startup(runner_instance: web.Application) -> None:
 
         # Store metrics_collector in the aiohttp application instance
         runner_instance['metrics_collector'] = metrics
-        # Also store in dp.data for potential handler access patterns
-        dp.data['metrics_collector'] = metrics
 
         # Create and store health check handler
         health_check_handler = create_health_check_handler(metrics)
