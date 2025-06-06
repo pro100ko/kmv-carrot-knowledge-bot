@@ -92,8 +92,8 @@ async def on_startup(runner_instance: Any) -> None:
         # Initialize database pool
         new_db_pool = DatabasePool(
             db_path=config.DB_FILE,
-            max_connections=config.DB_MAX_CONNECTIONS,
-            timeout=config.DB_TIMEOUT
+            max_connections=config.DB_POOL_SIZE,
+            timeout=config.DB_POOL_TIMEOUT
         )
         await new_db_pool.initialize()  # Initialize the pool first
 
