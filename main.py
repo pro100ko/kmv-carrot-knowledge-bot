@@ -96,22 +96,22 @@ async def on_startup(runner_instance: Any) -> None:
         )
         await new_db_pool.initialize()  # Initialize the pool first
 
-        # Store db_pool in both runner and dispatcher
-        runner_instance['db_pool'] = new_db_pool
-        bot.data['db_pool'] = new_db_pool
+        # Store db_pool in bot context for easy access in handlers
+        dp.data['db_pool'] = new_db_pool
 
         # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
         await sqlite_db.db.initialize()  # Initialize the database instance
 
-        # Store metrics collector
-        metrics = MetricsCollector()  # Create new instance
-        metrics.start()  # Start metrics collection
-        runner_instance['metrics_collector'] = metrics
-        bot.data['metrics_collector'] = metrics
+        # Initialize metrics collector
+        metrics = MetricsCollector()
+        metrics.start()
+
+        # Store metrics_collector in bot context
+        dp.data['metrics_collector'] = metrics
 
         # Create and store health check handler
-        health_check_handler = create_health_check_handler(metrics)  # Use the new instance
+        health_check_handler = create_health_check_handler(metrics)
         runner_instance['health_check_handler'] = health_check_handler
         app.router.add_get('/health', health_check_handler)
 
@@ -316,8 +316,11 @@ if __name__ == "__main__":
                 # Run cleanup
                 logger.info("Starting polling mode cleanup...")
 
+                # Access instances from dp.data (used bot.data previously but it caused AttributeError)
+                db_pool_instance = dp.data.get('db_pool')
+                metrics_collector_instance = dp.data.get('metrics_collector')
+
                 # Explicitly close db_pool if it was created
-                db_pool_instance = bot.data.get('db_pool')
                 if db_pool_instance:
                     try:
                         # Use the existing loop to run the async cleanup
@@ -327,7 +330,6 @@ if __name__ == "__main__":
                         logger.error(f"Error closing db_pool in polling finally: {db_cleanup_error}", exc_info=True)
 
                 # Explicitly stop metrics collector if it was created
-                metrics_collector_instance = bot.data.get('metrics_collector')
                 if metrics_collector_instance:
                     try:
                          # Use the existing loop to run the async cleanup
@@ -364,7 +366,7 @@ if __name__ == "__main__":
             logger.error(f"Error during cleanup: {cleanup_error}", exc_info=True)
         finally:
             # Explicitly close db_pool if it was created
-            db_pool_instance = bot.data.get('db_pool')
+            db_pool_instance = dp.data.get('db_pool')
             if db_pool_instance:
                 try:
                     loop = asyncio.get_event_loop()
