@@ -77,6 +77,9 @@ bot = Bot(
 )
 dp = Dispatcher()
 
+# Global dictionary to store application resources
+app_resources: Dict[str, Any] = {}
+
 # Create web application
 app = web.Application()
 
@@ -90,28 +93,34 @@ async def on_startup(runner_instance: web.Application) -> None:
         logger.info("Starting up application...")
 
         # Initialize database pool
-        new_db_pool = DatabasePool(
-            db_file=config.DB_FILE,
-            pool_size=config.DB_POOL_SIZE
-        )
-        await new_db_pool.initialize()  # Initialize the pool first
+        # Removed temporarily for debugging AttributeError
+        # new_db_pool = DatabasePool(
+        #     db_file=config.DB_FILE,
+        #     pool_size=config.DB_POOL_SIZE
+        # )
+        # await new_db_pool.initialize()  # Initialize the pool first
 
         # Store db_pool in the aiohttp application instance
-        runner_instance['db_pool'] = new_db_pool
+        # Removed temporarily for debugging AttributeError
+        # runner_instance['db_pool'] = new_db_pool
 
         # Initialize sqlite_db with the new pool
-        sqlite_db.initialize(new_db_pool)
-        await sqlite_db.db.initialize()  # Initialize the database instance
+        # Removed temporarily for debugging AttributeError
+        # sqlite_db.initialize(new_db_pool)
+        # await sqlite_db.db.initialize()  # Initialize the database instance
 
         # Initialize metrics collector
-        metrics = MetricsCollector()
-        metrics.start()
+        # Removed temporarily for debugging AttributeError
+        # metrics = MetricsCollector()
+        # metrics.start()
 
         # Store metrics_collector in the aiohttp application instance
-        runner_instance['metrics_collector'] = metrics
+        # Removed temporarily for debugging AttributeError
+        # runner_instance['metrics_collector'] = metrics
 
-        # Create and store health check handler
-        health_check_handler = create_health_check_handler(metrics)
+        # Create and store health check handler (still store in runner_instance for aiohttp access)
+        # Pass None for metrics temporarily
+        health_check_handler = create_health_check_handler(None)
         runner_instance['health_check_handler'] = health_check_handler
         runner_instance.router.add_get('/health', health_check_handler)
 
@@ -175,14 +184,17 @@ async def on_shutdown(runner_instance: web.Application) -> None:
     try:
         logger.info("Shutting down application...")
 
-        # Stop metrics collection - retrieve from aiohttp app instance
-        metrics_collector = runner_instance.get('metrics_collector')
+        # Stop metrics collection - retrieve from global app_resources (will be None if initialization commented out)
+        metrics_collector = app_resources.get('metrics_collector') # Still try to get from resources just in case
         if metrics_collector:
-            await metrics_collector.cleanup()  # Use cleanup instead of stop to ensure proper cleanup
-            logger.info("Metrics collection stopped")
+            # Check if cleanup method exists before calling
+            if hasattr(metrics_collector, 'cleanup') and callable(metrics_collector.cleanup):
+                await metrics_collector.cleanup()  # Use cleanup instead of stop to ensure proper cleanup
+                logger.info("Metrics collection stopped")
+            else:
+                 logger.warning("Metrics collector instance does not have a cleanup method.")
 
-        # Stop webhook if running (assuming webhook_handler is stored globally or in app instance if needed)
-        # For now, relying on global webhook_handler as per current code structure
+        # Stop webhook if running (assuming webhook_handler is stored globally)
         global webhook_handler
         if webhook_handler:
             # Check if webhook_handler has a shutdown method before calling
@@ -192,15 +204,19 @@ async def on_shutdown(runner_instance: web.Application) -> None:
             else:
                 logger.warning("webhook_handler does not have a shutdown method.")
 
-        # Close database pool - retrieve from aiohttp app instance
-        db_pool_instance = runner_instance.get('db_pool')
+        # Close database pool - retrieve from global app_resources (will be None if initialization commented out)
+        db_pool_instance = app_resources.get('db_pool') # Still try to get from resources just in case
         if db_pool_instance:
-            await db_pool_instance.close()
-            logger.info("Database pool closed")
+             # Check if close method exists before calling
+             if hasattr(db_pool_instance, 'close') and callable(db_pool_instance.close):
+                 await db_pool_instance.close()
+                 logger.info("Database pool closed")
+             else:
+                  logger.warning("Database pool instance does not have a close method.")
 
         # Close bot session
-        # Assuming 'bot' is accessible globally or via runner_instance if needed
-        # For now, relying on global 'bot' as per current code structure
+        # Assuming 'bot' is accessible globally
+        global bot
         if 'bot' in globals() and hasattr(bot, 'session') and hasattr(bot.session, 'close'):
              await bot.session.close()
              logger.info("Bot session closed")
