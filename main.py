@@ -94,14 +94,14 @@ async def on_startup(runner_instance: Any) -> None:
         max_connections=config.DB_MAX_CONNECTIONS,
         timeout=config.DB_TIMEOUT
     )
-            await new_db_pool.initialize()  # Initialize the pool first
+        await new_db_pool.initialize()  # Initialize the pool first
 
 # Store db_pool in both runner and dispatcher
         dp.data['db_pool'] = new_db_pool
 
 # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
-            await sqlite_db.db.initialize()  # Initialize the database instance
+        await sqlite_db.db.initialize()  # Initialize the database instance
 
 # Initialize metrics collector
         metrics = MetricsCollector()  # Create new instance
@@ -123,10 +123,10 @@ async def on_startup(runner_instance: Any) -> None:
         logger.info("Middleware registered")
 
 # Setup webhook or polling based on environment
-        if config.IS_PRODUCTION:
-            await setup_webhook(bot, dp, config.WEBHOOK_URL, config.WEBHOOK_PATH)
-        else:
-            await setup_polling(dp)
+    if config.IS_PRODUCTION:
+        await setup_webhook(bot, dp, config.WEBHOOK_URL, config.WEBHOOK_PATH)
+    else:
+        await setup_polling(dp)
 
 # Setup bot commands
         await setup_bot_commands(bot)
@@ -147,7 +147,7 @@ async def on_startup(runner_instance: Any) -> None:
         max_connections=config.DB_MAX_CONNECTIONS,
         timeout=config.DB_TIMEOUT
     )
-            await new_db_pool.initialize()  # Initialize the pool first
+        await new_db_pool.initialize()  # Initialize the pool first
 
         # Store db_pool in both runner and dispatcher
         runner_instance['db_pool'] = new_db_pool
@@ -155,7 +155,7 @@ async def on_startup(runner_instance: Any) -> None:
 
         # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
-            await sqlite_db.db.initialize()  # Initialize the database instance
+        await sqlite_db.db.initialize()  # Initialize the database instance
 
         # Initialize metrics collector
         metrics = MetricsCollector()  # Create new instance
