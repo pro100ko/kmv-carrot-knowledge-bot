@@ -100,7 +100,14 @@ async def on_startup(runner_instance: web.Application) -> None:
 
         # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
-        await sqlite_db.db.initialize()
+        
+        # Initialize database and run migrations
+        try:
+            await sqlite_db.db.initialize()
+        except Exception as e:
+            logger.error(f"Database initialization failed: {e}")
+            # Don't close the pool here, let the cleanup handle it
+            raise
 
         # Initialize metrics collector
         metrics = MetricsCollector()
@@ -163,42 +170,32 @@ async def on_startup(runner_instance: web.Application) -> None:
         raise
 
 async def on_shutdown(runner_instance: web.Application) -> None:
-    """Clean up application resources."""
-    logger.info("Entering on_shutdown function.")
+    """Cleanup application resources."""
+    logger.info("Starting application shutdown...")
     try:
-        logger.info("Shutting down application...")
+        # Get resources from application
+        db_pool = runner_instance.get('db_pool') if runner_instance else None
+        metrics = runner_instance.get('metrics_collector') if runner_instance else None
 
-        # Get application instance
-        application = runner_instance.get('application')
-        if application:
-            await application.shutdown()
+        # Cleanup database pool
+        if db_pool:
+            try:
+                await db_pool.close()
+                logger.info("Database pool closed")
+            except Exception as e:
+                logger.error(f"Error closing database pool: {e}")
 
-        # Stop metrics collection
-        metrics_collector = runner_instance.get('metrics_collector')
-        if metrics_collector and hasattr(metrics_collector, 'cleanup'):
-            await metrics_collector.cleanup()
-            logger.info("Metrics collection stopped")
-
-        # Stop webhook if running
-        global webhook_handler
-        if webhook_handler and hasattr(webhook_handler, 'shutdown'):
-            await webhook_handler.shutdown()
-            logger.info("Webhook server stopped")
-
-        # Close database pool
-        db_pool_instance = runner_instance.get('db_pool')
-        if db_pool_instance and hasattr(db_pool_instance, 'close'):
-            await db_pool_instance.close()
-            logger.info("Database pool closed")
-
-        # Close bot session
-        if bot and hasattr(bot, 'session'):
-            await bot.session.close()
-            logger.info("Bot session closed")
+        # Cleanup metrics
+        if metrics:
+            try:
+                await metrics.cleanup()
+                logger.info("Metrics collector cleaned up")
+            except Exception as e:
+                logger.error(f"Error cleaning up metrics: {e}")
 
         logger.info("Application shutdown completed")
     except Exception as e:
-        logger.error(f"Error during shutdown: {e}", exc_info=True)
+        logger.error(f"Error during shutdown: {e}")
         raise
 
 def handle_exception(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -> None:

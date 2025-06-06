@@ -241,9 +241,6 @@ class Database:
             os.makedirs(DB_BACKUP_DIR, exist_ok=True)
             os.makedirs(DB_MIGRATIONS_DIR, exist_ok=True)
             
-            # Initialize connection pool
-            await self._pool.initialize()
-            
             # Create backup before any schema changes
             await self._backup_database()
             
@@ -264,12 +261,8 @@ class Database:
         backup_file = os.path.join(DB_BACKUP_DIR, f"backup_{backup_time}.db")
         
         try:
-            # Ensure all connections are closed
-            await self._pool.close()
-            
-            # Copy database file
+            # Copy database file while it's still accessible
             shutil.copy2(DB_FILE, backup_file)
-            
             logger.info(f"Database backup created: {backup_file}")
         except Exception as e:
             logger.error(f"Failed to create database backup: {e}")
