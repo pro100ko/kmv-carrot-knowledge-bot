@@ -307,16 +307,15 @@ if __name__ == "__main__":
         loop.set_exception_handler(handle_exception)
         
         # Get host and port
-        run_host = config.WEBAPP_HOST
-        run_port = config.WEBAPP_PORT
-        if config.IS_PRODUCTION:
-            run_host = '0.0.0.0'
-            run_port = int(os.getenv('PORT', config.WEBAPP_PORT))  # Use PORT env variable in production
+        run_host = '0.0.0.0' # Render requires binding to 0.0.0.0
+        # Ensure to use Render's PORT environment variable
+        run_port = int(os.getenv('PORT', '8000')) # Fallback to 8000 if PORT env var is not set (unlikely on Render)
         
         # Run the application
         if config.ENABLE_WEBHOOK:
             # Use asyncio.run for the main entry point in webhook mode
             logger.info("Starting aiohttp web server with asyncio.run...")
+            logger.info(f"Binding to host: {run_host}, port: {run_port}") # Add explicit log for clarity
             try:
                 asyncio.run(web.run_app(
                     app,
