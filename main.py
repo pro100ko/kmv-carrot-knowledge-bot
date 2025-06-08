@@ -76,6 +76,9 @@ bot = Bot(
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
 
+# Initialize Dispatcher globally
+dp = Dispatcher()
+
 # Create web application
 app = web.Application()
 
@@ -95,8 +98,8 @@ async def on_startup(runner_instance: web.Application) -> None:
         )
         await new_db_pool.initialize()
 
-        # Store db_pool in the application instance
-        runner_instance['db_pool'] = new_db_pool
+        # Store db_pool in bot.data
+        bot.data['db_pool'] = new_db_pool
 
         # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
@@ -106,38 +109,26 @@ async def on_startup(runner_instance: web.Application) -> None:
             await sqlite_db.db.initialize()
         except Exception as e:
             logger.error(f"Database initialization failed: {e}")
-            # Don't close the pool here, let the cleanup handle it
             raise
 
         # Initialize metrics collector
         metrics = MetricsCollector()
-        runner_instance['metrics_collector'] = metrics
+        bot.data['metrics_collector'] = metrics
+
+        # Register middleware
+        dp.update.middleware(MetricsMiddleware(metrics))
+        dp.update.middleware(ErrorHandlingMiddleware())
+        dp.update.middleware(StateManagementMiddleware())
+        dp.update.middleware(LoggingMiddleware())
+        dp.update.middleware(AdminAccessMiddleware())
+        dp.update.middleware(UserActivityMiddleware())
+        dp.update.middleware(RateLimitMiddleware())
+        logger.info("Middleware registered")
 
         # Create and store health check handler
         health_check_handler = create_health_check_handler(metrics)
         runner_instance['health_check_handler'] = health_check_handler
         runner_instance.router.add_get('/health', health_check_handler)
-
-        # Create Dispatcher and Application
-        dp = Dispatcher()
-        aiogram_application = dp.to_app(
-            bot=bot,
-            middleware=[
-                MetricsMiddleware(metrics),
-                ErrorHandlingMiddleware(),
-                StateManagementMiddleware(),
-                LoggingMiddleware(),
-                AdminAccessMiddleware(),
-                UserActivityMiddleware(),
-                RateLimitMiddleware(),
-            ],
-        )
-
-        # Store resources in bot_data
-        aiogram_application.bot_data['db_pool'] = new_db_pool
-        aiogram_application.bot_data['metrics_collector'] = metrics
-
-        logger.info("Middleware registered")
 
         # Setup webhook or polling based on environment
         if config.IS_PRODUCTION:
@@ -151,18 +142,13 @@ async def on_startup(runner_instance: web.Application) -> None:
 
             webhook_url = f"https://{webhook_host}{webhook_path}"
             await bot.set_webhook(url=webhook_url)
-
-            # Create SimpleRequestHandler and setup aiohttp application
-            request_handler = SimpleRequestHandler(
-                dispatcher=dp,
-                bot=bot, # Pass bot to handler
-                handle_in_background=True,
-            )
-            request_handler.register(runner_instance.router, path=webhook_path)
-            # setup_application(runner_instance, aiogram_application) # This might overwrite routes, let's register handler manually for now
+            
+            # Use aiogram's setup_application to integrate with aiohttp
+            setup_application(runner_instance, dp, bot=bot)
             logger.info("Webhook setup completed.")
         else:
-            await setup_polling(application)
+            # This branch should not be reached in webhook mode. Polling logic is in __main__
+            pass
 
         # Setup bot commands
         await setup_bot_commands(bot)
@@ -173,9 +159,6 @@ async def on_startup(runner_instance: web.Application) -> None:
         setup_test_handlers(dp)
         setup_admin_handlers(dp)
 
-        # Store application in runner instance
-        runner_instance['aiogram_application'] = aiogram_application # Store aiogram application
-
         logger.info("Application startup completed successfully")
     except Exception as e:
         logger.error(f"Error during startup: {e}", exc_info=True)
@@ -185,9 +168,9 @@ async def on_shutdown(runner_instance: web.Application) -> None:
     """Cleanup application resources."""
     logger.info("Starting application shutdown...")
     try:
-        # Get resources from application
-        db_pool = runner_instance.get('db_pool') if runner_instance else None
-        metrics = runner_instance.get('metrics_collector') if runner_instance else None
+        # Get resources from bot.data (universal access)
+        db_pool = bot.data.get('db_pool')
+        metrics = bot.data.get('metrics_collector')
 
         # Cleanup database pool
         if db_pool:
@@ -205,6 +188,14 @@ async def on_shutdown(runner_instance: web.Application) -> None:
             except Exception as e:
                 logger.error(f"Error cleaning up metrics: {e}")
 
+        # Close bot session
+        if bot and bot.session and not bot.session.closed:
+            try:
+                await bot.session.close()
+                logger.info("Bot session closed")
+            except Exception as e:
+                logger.error(f"Error closing bot session during shutdown: {e}")
+
         logger.info("Application shutdown completed")
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
@@ -215,12 +206,9 @@ def handle_exception(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -
     exception = context.get('exception', context['message'])
     logger.error(f"Uncaught exception: {exception}", exc_info=exception if isinstance(exception, Exception) else None)
     
-    # Schedule application shutdown
-    if not loop.is_closed():
-        loop.create_task(on_shutdown(None))
-
-# Add health check endpoint - will be set in on_startup now
-# app.router.add_get("/health", health_check) # REMOVED: Router setup moved to on_startup
+    # Schedule application shutdown (only if in webhook mode, polling cleanup is handled differently)
+    if config.ENABLE_WEBHOOK and not loop.is_closed():
+        loop.create_task(on_shutdown(app))
 
 # Setup startup and shutdown handlers
 app.on_startup.append(on_startup)
@@ -316,11 +304,39 @@ if __name__ == "__main__":
             # In polling mode, we need to run the dispatcher directly
             logger.info("Starting bot in polling mode...")
             try:
-                # Create dispatcher
-                dp = Dispatcher()
-                
-                # Start polling in the background
+                # Initialize resources for polling mode
+                new_db_pool = DatabasePool(
+                    db_file=config.DB_FILE,
+                    pool_size=config.DB_POOL_SIZE
+                )
+                loop.run_until_complete(new_db_pool.initialize())
+                bot.data['db_pool'] = new_db_pool
+
+                sqlite_db.initialize(new_db_pool)
+                loop.run_until_complete(sqlite_db.db.initialize())
+
+                metrics = MetricsCollector()
+                bot.data['metrics_collector'] = metrics
+
+                # Register middleware for polling mode
+                dp.update.middleware(MetricsMiddleware(metrics))
+                dp.update.middleware(ErrorHandlingMiddleware())
+                dp.update.middleware(StateManagementMiddleware())
+                dp.update.middleware(LoggingMiddleware())
+                dp.update.middleware(AdminAccessMiddleware())
+                dp.update.middleware(UserActivityMiddleware())
+                dp.update.middleware(RateLimitMiddleware())
+
+                # Setup bot commands and handlers for polling mode
+                loop.run_until_complete(setup_bot_commands(bot))
+                setup_user_handlers(dp)
+                setup_catalog_handlers(dp)
+                setup_test_handlers(dp)
+                setup_admin_handlers(dp)
+
+                # Start polling
                 loop.create_task(dp.start_polling(
+                    bot,
                     allowed_updates=["message", "callback_query", "inline_query"],
                     drop_pending_updates=True
                 ))
@@ -334,9 +350,9 @@ if __name__ == "__main__":
                 # Run cleanup
                 logger.info("Starting polling mode cleanup...")
                 try:
-                    # Get resources from application
-                    db_pool_instance = app.get('db_pool')
-                    metrics_collector_instance = app.get('metrics_collector')
+                    # Get resources from bot.data (universal access)
+                    db_pool_instance = bot.data.get('db_pool')
+                    metrics_collector_instance = bot.data.get('metrics_collector')
 
                     # Cleanup resources
                     if db_pool_instance:
@@ -362,7 +378,7 @@ if __name__ == "__main__":
                             logger.error(f"Error closing bot session in polling finally: {bot_cleanup_error}", exc_info=True)
 
                 except Exception as cleanup_error:
-                    logger.error(f"Error during cleanup: {cleanup_error}", exc_info=True)
+                    logger.error(f"Error during polling cleanup: {cleanup_error}", exc_info=True)
                 finally:
                     # Close the event loop
                     try:
