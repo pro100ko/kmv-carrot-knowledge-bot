@@ -143,8 +143,13 @@ async def on_startup(runner_instance: web.Application) -> None:
             webhook_url = f"https://{webhook_host}{webhook_path}"
             await bot.set_webhook(url=webhook_url)
             
-            # Use aiogram's setup_application to integrate with aiohttp
-            setup_application(runner_instance, dp, bot=bot)
+            # Manually register SimpleRequestHandler
+            request_handler = SimpleRequestHandler(
+                dispatcher=dp,
+                bot=bot,
+                handle_in_background=True,
+            )
+            request_handler.register(runner_instance.router, path=webhook_path)
             logger.info("Webhook setup completed.")
         else:
             # This branch should not be reached in webhook mode. Polling logic is in __main__
