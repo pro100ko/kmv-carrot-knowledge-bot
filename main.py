@@ -192,13 +192,14 @@ async def on_shutdown(runner_instance: web.Application) -> None:
         db_pool = await dp.storage.get_data(key=STORAGE_KEYS['db_pool'])
         metrics = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
 
-        # Cleanup webhook handler
+        # Cleanup webhook handler (now holds AppRunner from setup_application)
         if webhook_handler:
             try:
-                await webhook_handler.close()
-                logger.info("Webhook handler closed")
+                # webhook_handler is now AppRunner, cleanup() is the method to use
+                await webhook_handler.cleanup()
+                logger.info("Webhook handler (AppRunner) cleaned up")
             except Exception as e:
-                logger.error(f"Error closing webhook handler: {e}")
+                logger.error(f"Error cleaning up webhook handler: {e}")
 
         # Cleanup database pool
         if db_pool:
@@ -308,22 +309,24 @@ if __name__ == "__main__":
         
         # Get host and port
         run_host = '0.0.0.0' # Render requires binding to 0.0.0.0
-        # Ensure to use Render's PORT environment variable
         run_port = int(os.getenv('PORT', '8000')) # Fallback to 8000 if PORT env var is not set (unlikely on Render)
         
         # Run the application
         if config.ENABLE_WEBHOOK:
-            # Use asyncio.run for the main entry point in webhook mode
-            logger.info("Starting aiohttp web server with asyncio.run...")
-            logger.info(f"Binding to host: {run_host}, port: {run_port}") # Add explicit log for clarity
+            logger.info("Starting aiohttp web server...")
+            logger.info(f"Binding to host: {run_host}, port: {run_port}")
             try:
-                asyncio.run(web.run_app(
-                    app,
-                    host=run_host,
-                    port=run_port,
-                    ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None
-                ))
-                logger.info("Web server stopped.")
+                # Ensure on_startup runs to initialize webhook_handler
+                loop.run_until_complete(on_startup(app))
+
+                # Now, manually set up and start the AppRunner for the webhook
+                # webhook_handler is of type web.AppRunner
+                site = web.TCPSite(webhook_handler, host=run_host, port=run_port, ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None)
+                loop.run_until_complete(site.start())
+
+                logger.info("Web server started successfully. Running event loop forever.")
+                loop.run_forever() # Keep the event loop running indefinitely
+
             except Exception as e:
                 logger.error(f"Error running web application: {e}", exc_info=True)
                 raise
@@ -370,10 +373,11 @@ if __name__ == "__main__":
                 # Start polling
                 loop.create_task(dp.start_polling(
                     bot,
-                    allowed_updates=["message", "callback_query", "inline_query"],
+                    allowed_updates=config.ALLOWED_UPDATES,
                     drop_pending_updates=True
                 ))
                 # Run the event loop
+                logger.info("Bot in polling mode started. Running event loop forever.")
                 loop.run_forever()
             except KeyboardInterrupt:
                 logger.info("Received shutdown signal, stopping bot...")
