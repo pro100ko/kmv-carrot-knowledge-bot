@@ -86,6 +86,12 @@ app = web.Application()
 # Store webhook handler for cleanup
 webhook_handler: Optional[SimpleRequestHandler] = None
 
+# Define storage keys
+STORAGE_KEYS = {
+    'db_pool': 'db_pool',
+    'metrics_collector': 'metrics_collector'
+}
+
 async def on_startup(runner_instance: web.Application) -> None:
     """Initialize application resources and start services."""
     logger.info("Entering on_startup function.")
@@ -100,7 +106,10 @@ async def on_startup(runner_instance: web.Application) -> None:
         await new_db_pool.initialize()
 
         # Store db_pool in storage
-        await dp.storage.set_data(bot=bot, data={'db_pool': new_db_pool})
+        await dp.storage.set_data(
+            key=STORAGE_KEYS['db_pool'],
+            data=new_db_pool
+        )
 
         # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
@@ -114,7 +123,10 @@ async def on_startup(runner_instance: web.Application) -> None:
 
         # Initialize metrics collector
         metrics = MetricsCollector()
-        await dp.storage.set_data(bot=bot, data={'metrics_collector': metrics})
+        await dp.storage.set_data(
+            key=STORAGE_KEYS['metrics_collector'],
+            data=metrics
+        )
 
         # Register middleware
         dp.update.middleware(MetricsMiddleware(metrics))
@@ -175,9 +187,8 @@ async def on_shutdown(runner_instance: web.Application) -> None:
     logger.info("Starting application shutdown...")
     try:
         # Get resources from storage
-        data = await dp.storage.get_data(bot=bot)
-        db_pool = data.get('db_pool')
-        metrics = data.get('metrics_collector')
+        db_pool = await dp.storage.get_data(key=STORAGE_KEYS['db_pool'])
+        metrics = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
 
         # Cleanup database pool
         if db_pool:
@@ -317,13 +328,19 @@ if __name__ == "__main__":
                     pool_size=config.DB_POOL_SIZE
                 )
                 loop.run_until_complete(new_db_pool.initialize())
-                loop.run_until_complete(dp.storage.set_data(bot=bot, data={'db_pool': new_db_pool}))
+                loop.run_until_complete(dp.storage.set_data(
+                    key=STORAGE_KEYS['db_pool'],
+                    data=new_db_pool
+                ))
 
                 sqlite_db.initialize(new_db_pool)
                 loop.run_until_complete(sqlite_db.db.initialize())
 
                 metrics = MetricsCollector()
-                loop.run_until_complete(dp.storage.set_data(bot=bot, data={'metrics_collector': metrics}))
+                loop.run_until_complete(dp.storage.set_data(
+                    key=STORAGE_KEYS['metrics_collector'],
+                    data=metrics
+                ))
 
                 # Register middleware for polling mode
                 dp.update.middleware(MetricsMiddleware(metrics))
@@ -359,9 +376,8 @@ if __name__ == "__main__":
                 try:
                     async def cleanup():
                         # Get resources from storage
-                        data = await dp.storage.get_data(bot=bot)
-                        db_pool_instance = data.get('db_pool')
-                        metrics_collector_instance = data.get('metrics_collector')
+                        db_pool_instance = await dp.storage.get_data(key=STORAGE_KEYS['db_pool'])
+                        metrics_collector_instance = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
 
                         # Cleanup resources
                         if db_pool_instance:
