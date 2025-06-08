@@ -165,6 +165,7 @@ async def on_startup(runner_instance: web.Application) -> None:
                 bot=bot,
                 path=webhook_path,
             )
+            # We don't start the runner here, web.run_app() does it.
             logger.info("Webhook setup completed.")
         else:
             # This branch should not be reached in webhook mode. Polling logic is in __main__
@@ -316,17 +317,15 @@ if __name__ == "__main__":
             logger.info("Starting aiohttp web server...")
             logger.info(f"Binding to host: {run_host}, port: {run_port}")
             try:
-                # Ensure on_startup runs to initialize webhook_handler
-                loop.run_until_complete(on_startup(app))
-
-                # Now, manually set up and start the AppRunner for the webhook
-                # webhook_handler is of type web.AppRunner
-                site = web.TCPSite(webhook_handler, host=run_host, port=run_port, ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None)
-                loop.run_until_complete(site.start())
-
-                logger.info("Web server started successfully. Running event loop forever.")
-                loop.run_forever() # Keep the event loop running indefinitely
-
+                # web.run_app will call app.on_startup and manage the event loop
+                web.run_app(
+                    app,
+                    host=run_host,
+                    port=run_port,
+                    ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None,
+                    loop=loop
+                )
+                logger.info("Web server stopped.") # This log indicates normal shutdown, not an error
             except Exception as e:
                 logger.error(f"Error running web application: {e}", exc_info=True)
                 raise
