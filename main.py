@@ -99,7 +99,7 @@ async def on_startup(runner_instance: web.Application) -> None:
         await new_db_pool.initialize()
 
         # Store db_pool in bot.data
-        dp.data['db_pool'] = new_db_pool
+        dp.bot_data['db_pool'] = new_db_pool
 
         # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
@@ -113,7 +113,7 @@ async def on_startup(runner_instance: web.Application) -> None:
 
         # Initialize metrics collector
         metrics = MetricsCollector()
-        dp.data['metrics_collector'] = metrics
+        dp.bot_data['metrics_collector'] = metrics
 
         # Register middleware
         dp.update.middleware(MetricsMiddleware(metrics))
@@ -174,8 +174,8 @@ async def on_shutdown(runner_instance: web.Application) -> None:
     logger.info("Starting application shutdown...")
     try:
         # Get resources from bot.data (universal access)
-        db_pool = dp.data.get('db_pool')
-        metrics = dp.data.get('metrics_collector')
+        db_pool = dp.bot_data.get('db_pool')
+        metrics = dp.bot_data.get('metrics_collector')
 
         # Cleanup database pool
         if db_pool:
@@ -315,13 +315,13 @@ if __name__ == "__main__":
                     pool_size=config.DB_POOL_SIZE
                 )
                 loop.run_until_complete(new_db_pool.initialize())
-                dp.data['db_pool'] = new_db_pool
+                dp.bot_data['db_pool'] = new_db_pool
 
                 sqlite_db.initialize(new_db_pool)
                 loop.run_until_complete(sqlite_db.db.initialize())
 
                 metrics = MetricsCollector()
-                dp.data['metrics_collector'] = metrics
+                dp.bot_data['metrics_collector'] = metrics
 
                 # Register middleware for polling mode
                 dp.update.middleware(MetricsMiddleware(metrics))
@@ -356,8 +356,8 @@ if __name__ == "__main__":
                 logger.info("Starting polling mode cleanup...")
                 try:
                     # Get resources from bot.data (universal access)
-                    db_pool_instance = dp.data.get('db_pool')
-                    metrics_collector_instance = dp.data.get('metrics_collector')
+                    db_pool_instance = dp.bot_data.get('db_pool')
+                    metrics_collector_instance = dp.bot_data.get('metrics_collector')
 
                     # Cleanup resources
                     if db_pool_instance:
