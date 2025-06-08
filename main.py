@@ -17,6 +17,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command
 from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat, Update
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiohttp import web
 
 load_dotenv() # Load environment variables from .env file
@@ -76,8 +77,8 @@ bot = Bot(
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
 
-# Initialize Dispatcher globally
-dp = Dispatcher()
+# Initialize Dispatcher globally with storage
+dp = Dispatcher(storage=MemoryStorage())
 
 # Create web application
 app = web.Application()
@@ -98,8 +99,8 @@ async def on_startup(runner_instance: web.Application) -> None:
         )
         await new_db_pool.initialize()
 
-        # Store db_pool in bot.data
-        dp.bot_data['db_pool'] = new_db_pool
+        # Store db_pool in storage
+        await dp.storage.set_data(bot=bot, data={'db_pool': new_db_pool})
 
         # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
@@ -113,7 +114,7 @@ async def on_startup(runner_instance: web.Application) -> None:
 
         # Initialize metrics collector
         metrics = MetricsCollector()
-        dp.bot_data['metrics_collector'] = metrics
+        await dp.storage.set_data(bot=bot, data={'metrics_collector': metrics})
 
         # Register middleware
         dp.update.middleware(MetricsMiddleware(metrics))
@@ -173,9 +174,10 @@ async def on_shutdown(runner_instance: web.Application) -> None:
     """Cleanup application resources."""
     logger.info("Starting application shutdown...")
     try:
-        # Get resources from bot.data (universal access)
-        db_pool = dp.bot_data.get('db_pool')
-        metrics = dp.bot_data.get('metrics_collector')
+        # Get resources from storage
+        data = await dp.storage.get_data(bot=bot)
+        db_pool = data.get('db_pool')
+        metrics = data.get('metrics_collector')
 
         # Cleanup database pool
         if db_pool:
@@ -315,13 +317,13 @@ if __name__ == "__main__":
                     pool_size=config.DB_POOL_SIZE
                 )
                 loop.run_until_complete(new_db_pool.initialize())
-                dp.bot_data['db_pool'] = new_db_pool
+                loop.run_until_complete(dp.storage.set_data(bot=bot, data={'db_pool': new_db_pool}))
 
                 sqlite_db.initialize(new_db_pool)
                 loop.run_until_complete(sqlite_db.db.initialize())
 
                 metrics = MetricsCollector()
-                dp.bot_data['metrics_collector'] = metrics
+                loop.run_until_complete(dp.storage.set_data(bot=bot, data={'metrics_collector': metrics}))
 
                 # Register middleware for polling mode
                 dp.update.middleware(MetricsMiddleware(metrics))
@@ -355,32 +357,37 @@ if __name__ == "__main__":
                 # Run cleanup
                 logger.info("Starting polling mode cleanup...")
                 try:
-                    # Get resources from bot.data (universal access)
-                    db_pool_instance = dp.bot_data.get('db_pool')
-                    metrics_collector_instance = dp.bot_data.get('metrics_collector')
+                    async def cleanup():
+                        # Get resources from storage
+                        data = await dp.storage.get_data(bot=bot)
+                        db_pool_instance = data.get('db_pool')
+                        metrics_collector_instance = data.get('metrics_collector')
 
-                    # Cleanup resources
-                    if db_pool_instance:
-                        try:
-                            loop.run_until_complete(db_pool_instance.close())
-                            logger.info("Database pool closed in polling cleanup")
-                        except Exception as db_cleanup_error:
-                            logger.error(f"Error closing db_pool in polling finally: {db_cleanup_error}", exc_info=True)
+                        # Cleanup resources
+                        if db_pool_instance:
+                            try:
+                                await db_pool_instance.close()
+                                logger.info("Database pool closed in polling cleanup")
+                            except Exception as db_cleanup_error:
+                                logger.error(f"Error closing db_pool in polling finally: {db_cleanup_error}", exc_info=True)
 
-                    if metrics_collector_instance:
-                        try:
-                            loop.run_until_complete(metrics_collector_instance.cleanup())
-                            logger.info("Metrics collector stopped in polling cleanup")
-                        except Exception as metrics_cleanup_error:
-                            logger.error(f"Error stopping metrics collector in polling finally: {metrics_cleanup_error}", exc_info=True)
+                        if metrics_collector_instance:
+                            try:
+                                await metrics_collector_instance.cleanup()
+                                logger.info("Metrics collector stopped in polling cleanup")
+                            except Exception as metrics_cleanup_error:
+                                logger.error(f"Error stopping metrics collector in polling finally: {metrics_cleanup_error}", exc_info=True)
 
-                    # Close bot session
-                    if bot and bot.session and not bot.session.closed:
-                        try:
-                            loop.run_until_complete(bot.session.close())
-                            logger.info("Bot session closed in polling cleanup")
-                        except Exception as bot_cleanup_error:
-                            logger.error(f"Error closing bot session in polling finally: {bot_cleanup_error}", exc_info=True)
+                        # Close bot session
+                        if bot and bot.session and not bot.session.closed:
+                            try:
+                                await bot.session.close()
+                                logger.info("Bot session closed in polling cleanup")
+                            except Exception as bot_cleanup_error:
+                                logger.error(f"Error closing bot session in polling finally: {bot_cleanup_error}", exc_info=True)
+
+                    # Run cleanup
+                    loop.run_until_complete(cleanup())
 
                 except Exception as cleanup_error:
                     logger.error(f"Error during polling cleanup: {cleanup_error}", exc_info=True)
