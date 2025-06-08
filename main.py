@@ -157,13 +157,14 @@ async def on_startup(runner_instance: web.Application) -> None:
             webhook_url = f"https://{webhook_host}{webhook_path}"
             await bot.set_webhook(url=webhook_url)
             
-            # Manually register SimpleRequestHandler
-            request_handler = SimpleRequestHandler(
-                dispatcher=dp,
+            # Use setup_application for proper aiogram-aiohttp integration
+            global webhook_handler
+            webhook_handler = setup_application(
+                runner_instance,  # Pass the web.Application instance
+                dp,
                 bot=bot,
-                handle_in_background=True,
+                path=webhook_path,
             )
-            request_handler.register(runner_instance.router, path=webhook_path)
             logger.info("Webhook setup completed.")
         else:
             # This branch should not be reached in webhook mode. Polling logic is in __main__
@@ -190,6 +191,14 @@ async def on_shutdown(runner_instance: web.Application) -> None:
         # Get resources from storage
         db_pool = await dp.storage.get_data(key=STORAGE_KEYS['db_pool'])
         metrics = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
+
+        # Cleanup webhook handler
+        if webhook_handler:
+            try:
+                await webhook_handler.close()
+                logger.info("Webhook handler closed")
+            except Exception as e:
+                logger.error(f"Error closing webhook handler: {e}")
 
         # Cleanup database pool
         if db_pool:
