@@ -84,9 +84,6 @@ dp = Dispatcher(storage=MemoryStorage())
 # Create web application
 app = web.Application()
 
-# Store webhook handler for cleanup
-webhook_handler: Optional[SimpleRequestHandler] = None
-
 # Define storage keys
 STORAGE_KEYS = {
     'db_pool': 'db_pool',
@@ -106,10 +103,10 @@ async def on_startup(runner_instance: web.Application) -> None:
         )
         await new_db_pool.initialize()
 
-        # Store db_pool in storage (wrapped in a dictionary)
+        # Store db_pool in storage
         await dp.storage.set_data(
             key=STORAGE_KEYS['db_pool'],
-            data={'db_pool': new_db_pool}
+            data={'db_pool': new_db_pool}  # Wrap in dict
         )
 
         # Initialize sqlite_db with the new pool
@@ -126,11 +123,11 @@ async def on_startup(runner_instance: web.Application) -> None:
         metrics = MetricsCollector()
         await dp.storage.set_data(
             key=STORAGE_KEYS['metrics_collector'],
-            data={'metrics_collector': metrics} # Wrapped in a dictionary
+            data={'metrics_collector': metrics}  # Wrap in dict
         )
 
         # Register middleware
-        dp.update.middleware(MetricsMiddleware(metrics))
+        dp.update.middleware(MetricsMiddleware())  # Remove metrics argument
         dp.update.middleware(ErrorHandlingMiddleware())
         dp.update.middleware(StateManagementMiddleware())
         dp.update.middleware(LoggingMiddleware())
@@ -158,8 +155,7 @@ async def on_startup(runner_instance: web.Application) -> None:
             await bot.set_webhook(url=webhook_url)
             
             # Use setup_application for proper aiogram-aiohttp integration
-            global webhook_handler # Declare global here
-            webhook_handler = setup_application(
+            setup_application(  # Remove global and assignment
                 runner_instance,  # Pass the web.Application instance
                 dp,
                 bot=bot,
@@ -195,16 +191,6 @@ async def on_shutdown(runner_instance: web.Application) -> None:
 
         metrics_data = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
         metrics = metrics_data.get('metrics_collector') if metrics_data else None
-
-        # Cleanup webhook handler (now holds AppRunner from setup_application)
-        global webhook_handler # Declare global here
-        if webhook_handler:
-            try:
-                # webhook_handler is now AppRunner, cleanup() is the method to use
-                await webhook_handler.cleanup()
-                logger.info("Webhook handler (AppRunner) cleaned up")
-            except Exception as e:
-                logger.error(f"Error cleaning up webhook handler: {e}")
 
         # Cleanup database pool
         if db_pool:
@@ -345,7 +331,7 @@ if __name__ == "__main__":
                 loop.run_until_complete(new_db_pool.initialize())
                 loop.run_until_complete(dp.storage.set_data(
                     key=STORAGE_KEYS['db_pool'],
-                    data={'db_pool': new_db_pool} # Wrapped in a dictionary
+                    data={'db_pool': new_db_pool}  # Wrap in dict
                 ))
 
                 sqlite_db.initialize(new_db_pool)
@@ -354,11 +340,11 @@ if __name__ == "__main__":
                 metrics = MetricsCollector()
                 loop.run_until_complete(dp.storage.set_data(
                     key=STORAGE_KEYS['metrics_collector'],
-                    data={'metrics_collector': metrics} # Wrapped in a dictionary
+                    data={'metrics_collector': metrics}  # Wrap in dict
                 ))
 
                 # Register middleware for polling mode
-                dp.update.middleware(MetricsMiddleware(metrics))
+                dp.update.middleware(MetricsMiddleware())  # Remove metrics argument
                 dp.update.middleware(ErrorHandlingMiddleware())
                 dp.update.middleware(StateManagementMiddleware())
                 dp.update.middleware(LoggingMiddleware())
