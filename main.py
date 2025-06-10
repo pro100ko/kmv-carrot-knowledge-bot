@@ -106,10 +106,10 @@ async def on_startup(runner_instance: web.Application) -> None:
         )
         await new_db_pool.initialize()
 
-        # Store db_pool in storage
+        # Store db_pool in storage (wrapped in a dictionary)
         await dp.storage.set_data(
             key=STORAGE_KEYS['db_pool'],
-            data=new_db_pool
+            data={'db_pool': new_db_pool}
         )
 
         # Initialize sqlite_db with the new pool
@@ -126,7 +126,7 @@ async def on_startup(runner_instance: web.Application) -> None:
         metrics = MetricsCollector()
         await dp.storage.set_data(
             key=STORAGE_KEYS['metrics_collector'],
-            data=metrics
+            data={'metrics_collector': metrics} # Wrapped in a dictionary
         )
 
         # Register middleware
@@ -158,7 +158,7 @@ async def on_startup(runner_instance: web.Application) -> None:
             await bot.set_webhook(url=webhook_url)
             
             # Use setup_application for proper aiogram-aiohttp integration
-            global webhook_handler
+            global webhook_handler # Declare global here
             webhook_handler = setup_application(
                 runner_instance,  # Pass the web.Application instance
                 dp,
@@ -189,11 +189,15 @@ async def on_shutdown(runner_instance: web.Application) -> None:
     """Cleanup application resources."""
     logger.info("Starting application shutdown...")
     try:
-        # Get resources from storage
-        db_pool = await dp.storage.get_data(key=STORAGE_KEYS['db_pool'])
-        metrics = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
+        # Get resources from storage (expecting them wrapped in a dictionary)
+        db_pool_data = await dp.storage.get_data(key=STORAGE_KEYS['db_pool'])
+        db_pool = db_pool_data.get('db_pool') if db_pool_data else None
+
+        metrics_data = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
+        metrics = metrics_data.get('metrics_collector') if metrics_data else None
 
         # Cleanup webhook handler (now holds AppRunner from setup_application)
+        global webhook_handler # Declare global here
         if webhook_handler:
             try:
                 # webhook_handler is now AppRunner, cleanup() is the method to use
@@ -341,7 +345,7 @@ if __name__ == "__main__":
                 loop.run_until_complete(new_db_pool.initialize())
                 loop.run_until_complete(dp.storage.set_data(
                     key=STORAGE_KEYS['db_pool'],
-                    data=new_db_pool
+                    data={'db_pool': new_db_pool} # Wrapped in a dictionary
                 ))
 
                 sqlite_db.initialize(new_db_pool)
@@ -350,7 +354,7 @@ if __name__ == "__main__":
                 metrics = MetricsCollector()
                 loop.run_until_complete(dp.storage.set_data(
                     key=STORAGE_KEYS['metrics_collector'],
-                    data=metrics
+                    data={'metrics_collector': metrics} # Wrapped in a dictionary
                 ))
 
                 # Register middleware for polling mode
@@ -387,9 +391,12 @@ if __name__ == "__main__":
                 logger.info("Starting polling mode cleanup...")
                 try:
                     async def cleanup():
-                        # Get resources from storage
-                        db_pool_instance = await dp.storage.get_data(key=STORAGE_KEYS['db_pool'])
-                        metrics_collector_instance = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
+                        # Get resources from storage (expecting them wrapped in a dictionary)
+                        db_pool_data = await dp.storage.get_data(key=STORAGE_KEYS['db_pool'])
+                        db_pool_instance = db_pool_data.get('db_pool') if db_pool_data else None
+
+                        metrics_collector_data = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
+                        metrics_collector_instance = metrics_collector_data.get('metrics_collector') if metrics_collector_data else None
 
                         # Cleanup resources
                         if db_pool_instance:
