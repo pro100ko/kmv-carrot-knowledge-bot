@@ -30,7 +30,7 @@ services:
       - key: WEBHOOK_HOST
         sync: false
       - key: WEBHOOK_PATH
-        value: /webhook
+        value: /webhook/${BOT_TOKEN}
       - key: WEBHOOK_PORT
         value: 10000
       - key: ENABLE_WEBHOOK

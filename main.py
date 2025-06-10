@@ -151,8 +151,25 @@ async def on_startup(runner_instance: web.Application) -> None:
                 logger.error("WEBHOOK_HOST or RENDER_EXTERNAL_URL environment variable is not set.")
                 raise ValueError("WEBHOOK_HOST or RENDER_EXTERNAL_URL must be set in production.")
 
+            # Log webhook configuration
+            logger.info(f"Webhook host: {webhook_host}")
+            logger.info(f"Webhook path: {webhook_path}")
+            
+            # Ensure webhook_host doesn't have protocol prefix
+            if webhook_host.startswith("https://"):
+                webhook_host = webhook_host[8:]
+            elif webhook_host.startswith("http://"):
+                webhook_host = webhook_host[7:]
+            
             webhook_url = f"https://{webhook_host}{webhook_path}"
-            await bot.set_webhook(url=webhook_url)
+            logger.info(f"Full webhook URL: {webhook_url}")
+            
+            try:
+                await bot.set_webhook(url=webhook_url)
+                logger.info("Webhook set successfully")
+            except Exception as e:
+                logger.error(f"Failed to set webhook: {e}")
+                raise
             
             # Use setup_application for proper aiogram-aiohttp integration
             setup_application(  # Remove global and assignment
