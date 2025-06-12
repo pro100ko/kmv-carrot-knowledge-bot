@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-# Added a comment to force Render to re-deploy
 import signal
 import sys
 import os
@@ -24,20 +23,6 @@ from aiohttp import web
 load_dotenv() # Load environment variables from .env file
 
 import config
-# from config import (
-#     BOT_TOKEN,
-#     WEBHOOK_PATH,
-#     WEBAPP_PORT,
-#     WEBHOOK_SSL_CERT,
-#     WEBHOOK_SSL_PRIV,
-#     ENABLE_WEBHOOK,
-#     ENABLE_METRICS,
-#     LOG_LEVEL,
-#     WEBHOOK_URL,
-#     ENVIRONMENT,
-#     IS_PRODUCTION,
-#     WEBAPP_HOST
-# )
 from utils.db_pool import DatabasePool
 from utils.resource_manager import ResourceManager
 from logging_config import setup_logging
@@ -81,13 +66,6 @@ bot = Bot(
 # Initialize Dispatcher globally with storage
 dp = Dispatcher(storage=MemoryStorage())
 
-# Register our custom startup and shutdown handlers with the dispatcher
-dp.startup.register(on_startup)
-dp.shutdown.register(on_shutdown)
-
-# Create web application
-app = web.Application()
-
 # Define storage keys
 STORAGE_KEYS = {
     'db_pool': 'db_pool',
@@ -115,7 +93,7 @@ async def on_startup(bot: Bot, dispatcher: Dispatcher) -> None:
 
         # Initialize sqlite_db with the new pool
         sqlite_db.initialize(new_db_pool)
-        
+
         # Initialize database and run migrations
         try:
             await sqlite_db.db.initialize()
@@ -131,7 +109,7 @@ async def on_startup(bot: Bot, dispatcher: Dispatcher) -> None:
         )
 
         # Register middleware
-        dispatcher.update.middleware(MetricsMiddleware())  # Remove metrics argument
+        dispatcher.update.middleware(MetricsMiddleware())
         dispatcher.update.middleware(ErrorHandlingMiddleware())
         dispatcher.update.middleware(StateManagementMiddleware())
         dispatcher.update.middleware(LoggingMiddleware())
@@ -198,17 +176,10 @@ def handle_exception(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -
     """Handle uncaught exceptions in the event loop."""
     exception = context.get('exception', context['message'])
     logger.error(f"Uncaught exception: {exception}", exc_info=exception if isinstance(exception, Exception) else None)
-    
+
     # The dispatcher's shutdown handlers will be called by aiogram's integration with aiohttp
     # for webhook mode, and explicitly in polling mode's finally block.
     # No need to manually schedule on_shutdown here.
-
-# Setup startup and shutdown handlers
-# app.on_startup.append(on_startup) # REMOVE THIS
-# app.on_shutdown.append(on_shutdown) # REMOVE THIS
-
-logger.info("Starting aiohttp web application...")
-logger.info(f"Binding to port: {config.WEBAPP_PORT}")
 
 def get_ssl_context() -> Optional[ssl.SSLContext]:
     """Create SSL context for webhook."""
@@ -234,7 +205,7 @@ async def setup_bot_commands(bot: Bot) -> None:
             BotCommand(command="tests", description="Доступные тесты"),
             BotCommand(command="profile", description="Мой профиль")
         ]
-        
+
         # Add admin commands if user is admin
         admin_commands = [
             BotCommand(command="admin", description="Панель управления"),
@@ -243,38 +214,48 @@ async def setup_bot_commands(bot: Bot) -> None:
             BotCommand(command="categories", description="Управление категориями"),
             BotCommand(command="settings", description="Настройки бота")
         ]
-        
+
         # Set commands for all users
         await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
-        
+
         # Set admin commands for admin users
         for admin_id in config.ADMIN_IDS:
             await bot.set_my_commands(
                 commands + admin_commands,
                 scope=BotCommandScopeChat(chat_id=admin_id)
             )
-        
+
         logger.info("Bot commands configured successfully")
     except Exception as e:
         logger.error(f"Error setting up bot commands: {e}", exc_info=True)
         raise
 
+# Register our custom startup and shutdown handlers with the dispatcher
+dp.startup.register(on_startup)
+dp.shutdown.register(on_shutdown)
+
+# Create web application
+app = web.Application()
+
+logger.info("Starting aiohttp web application...\n")
+logger.info(f"Binding to port: {config.WEBAPP_PORT}\n")
+
 if __name__ == "__main__":
     try:
         # Setup logging
         setup_logging()
-        
+
         # Create new event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        
+
         # Set up exception handler
         loop.set_exception_handler(handle_exception)
-        
+
         # Get host and port
         run_host = '0.0.0.0' # Render requires binding to 0.0.0.0
         run_port = int(os.getenv('PORT', '8000')) # Fallback to 8000 if PORT env var is not set (unlikely on Render)
-        
+
         # Run the application
         if config.ENABLE_WEBHOOK:
             logger.info("Starting aiohttp web server...")
@@ -282,7 +263,7 @@ if __name__ == "__main__":
 
             webhook_host = os.getenv("WEBHOOK_HOST") or os.getenv("RENDER_EXTERNAL_URL")
             webhook_path = os.getenv("WEBHOOK_PATH", f"/webhook/{config.BOT_TOKEN}")
-            
+
             if not webhook_host:
                 logger.error("WEBHOOK_HOST or RENDER_EXTERNAL_URL environment variable is not set.")
                 raise ValueError("WEBHOOK_HOST or RENDER_EXTERNAL_URL must be set in production.")
@@ -290,16 +271,16 @@ if __name__ == "__main__":
             # Log webhook configuration
             logger.info(f"Webhook host: {webhook_host}")
             logger.info(f"Webhook path: {webhook_path}")
-            
+
             # Ensure webhook_host doesn't have protocol prefix
             if webhook_host.startswith("https://"):
                 webhook_host = webhook_host[8:]
             elif webhook_host.startswith("http://"):
                 webhook_host = webhook_host[7:]
-            
+
             webhook_url = f"https://{webhook_host}{webhook_path}"
             logger.info(f"Full webhook URL: {webhook_url}")
-            
+
             try:
                 loop.run_until_complete(bot.set_webhook(url=webhook_url))
                 logger.info("Webhook set successfully")
@@ -314,7 +295,7 @@ if __name__ == "__main__":
                 bot=bot,
                 path=webhook_path,
             )
-            
+
             # Health check handler setup
             # The metrics collector is initialized in on_startup, which is called by dp.startup.
             # So, at this point, after setup_application, we can assume on_startup has run and metrics are available.
@@ -358,7 +339,7 @@ if __name__ == "__main__":
                 ))
                 # Run the event loop
                 logger.info("Bot in polling mode started. Running event loop forever.")
-                loop.run_forever()
+                loop.run_forever() # Keep the loop running for background tasks
             except KeyboardInterrupt:
                 logger.info("Received shutdown signal, stopping bot...")
             except Exception as e:
@@ -372,6 +353,7 @@ if __name__ == "__main__":
                         logger.info("Event loop closed in polling cleanup.")
                 except Exception as loop_error:
                     logger.error(f"Error closing event loop: {loop_error}", exc_info=True)
+
 
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
