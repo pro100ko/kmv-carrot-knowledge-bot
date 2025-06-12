@@ -329,9 +329,17 @@ async def setup_webhook_and_run_app():
         setup_application(app, dp, bot=bot, path=webhook_path)
         logger.info("Webhook handler setup completed")
 
-        # Add health check handler
-        app.router.add_get('/health', create_health_check_handler(metrics_collector))
-        logger.info("Health check handler added")
+        # Try to get metrics collector from storage and add health check handler if available
+        try:
+            metrics_data = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
+            metrics_collector = metrics_data.get('metrics_collector') if metrics_data else None
+            if metrics_collector:
+                app.router.add_get('/health', create_health_check_handler(metrics_collector))
+                logger.info("Health check handler added")
+            else:
+                logger.warning("Metrics collector not found in storage, health check handler not added")
+        except Exception as metrics_error:
+            logger.warning(f"Could not setup health check handler: {metrics_error}")
 
         # Run the application
         await web._run_app(
