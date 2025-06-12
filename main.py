@@ -287,6 +287,64 @@ app = web.Application()
 logger.info("Starting aiohttp web application...\n")
 logger.info(f"Binding to port: {config.WEBAPP_PORT}\n")
 
+async def setup_webhook_and_run_app():
+    """Setup webhook and run the application."""
+    # Get host and port
+    run_host = '0.0.0.0' # Render requires binding to 0.0.0.0
+    run_port = int(os.getenv('PORT', '8000')) # Fallback to 8000 if PORT env var is not set (unlikely on Render)
+
+    logger.info("Starting aiohttp web server...")
+    logger.info(f"Binding to host: {run_host}, port: {run_port}")
+
+    webhook_host = os.getenv("WEBHOOK_HOST") or os.getenv("RENDER_EXTERNAL_URL")
+    webhook_path = os.getenv("WEBHOOK_PATH", f"/webhook/{config.BOT_TOKEN}")
+
+    if not webhook_host:
+        logger.error("WEBHOOK_HOST or RENDER_EXTERNAL_URL environment variable is not set.")
+        raise ValueError("WEBHOOK_HOST or RENDER_EXTERNAL_URL must be set in production.")
+
+    # Log webhook configuration
+    logger.info(f"Webhook host: {webhook_host}")
+    logger.info(f"Webhook path: {webhook_path}")
+
+    # Ensure webhook_host doesn't have protocol prefix
+    if webhook_host.startswith("https://"):
+        webhook_host = webhook_host[8:]
+    elif webhook_host.startswith("http://"):
+        webhook_host = webhook_host[7:]
+
+    webhook_url = f"https://{webhook_host}{webhook_path}"
+    logger.info(f"Full webhook URL: {webhook_url}")
+
+    try:
+        # Set webhook using aiogram's built-in method
+        await bot.set_webhook(
+            url=webhook_url,
+            allowed_updates=config.ALLOWED_UPDATES,
+            drop_pending_updates=True
+        )
+        logger.info("Webhook set successfully")
+
+        # Setup application with aiogram's built-in handler
+        setup_application(app, dp, bot=bot, path=webhook_path)
+        logger.info("Webhook handler setup completed")
+
+        # Add health check handler
+        app.router.add_get('/health', create_health_check_handler(metrics_collector))
+        logger.info("Health check handler added")
+
+        # Run the application
+        await web._run_app(
+            app,
+            host=run_host,
+            port=run_port,
+            ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None
+        )
+        logger.info("Web server stopped.")
+    except Exception as e:
+        logger.error(f"Failed to setup webhook: {e}", exc_info=True)
+        raise
+
 if __name__ == "__main__":
     try:
         # Setup logging
@@ -299,89 +357,9 @@ if __name__ == "__main__":
         # Set up exception handler
         loop.set_exception_handler(handle_exception)
 
-        # Get host and port
-        run_host = '0.0.0.0' # Render requires binding to 0.0.0.0
-        run_port = int(os.getenv('PORT', '8000')) # Fallback to 8000 if PORT env var is not set (unlikely on Render)
-
         # Run the application
         if config.ENABLE_WEBHOOK:
-            logger.info("Starting aiohttp web server...")
-            logger.info(f"Binding to host: {run_host}, port: {run_port}")
-
-            webhook_host = os.getenv("WEBHOOK_HOST") or os.getenv("RENDER_EXTERNAL_URL")
-            webhook_path = os.getenv("WEBHOOK_PATH", f"/webhook/{config.BOT_TOKEN}")
-
-            if not webhook_host:
-                logger.error("WEBHOOK_HOST or RENDER_EXTERNAL_URL environment variable is not set.")
-                raise ValueError("WEBHOOK_HOST or RENDER_EXTERNAL_URL must be set in production.")
-
-            # Log webhook configuration
-            logger.info(f"Webhook host: {webhook_host}")
-            logger.info(f"Webhook path: {webhook_path}")
-
-            # Ensure webhook_host doesn't have protocol prefix
-            if webhook_host.startswith("https://"):
-                webhook_host = webhook_host[8:]
-            elif webhook_host.startswith("http://"):
-                webhook_host = webhook_host[7:]
-
-            webhook_url = f"https://{webhook_host}{webhook_path}"
-            logger.info(f"Full webhook URL: {webhook_url}")
-
-            try:
-                loop.run_until_complete(bot.set_webhook(url=webhook_url))
-                logger.info("Webhook set successfully")
-            except Exception as e:
-                logger.error(f"Failed to set webhook: {e}")
-                raise
-
-            # Manually register webhook handler on application router
-            async def aiogram_webhook_handler(request: web.Request):
-                try:
-                    update_json = await request.text()
-                    logger.info(f"Received webhook update: {update_json}")
-                    update = types.Update.model_validate_json(update_json)
-                    logger.info(f"Parsed update: {update}")
-                    await dp.feed_webhook_update(bot, update)
-                    logger.info("Update processed successfully")
-                    return web.Response(text="OK")
-                except Exception as e:
-                    logger.error(f"Error processing webhook update: {e}", exc_info=True)
-                    raise
-
-            app.router.add_post(webhook_path, aiogram_webhook_handler)
-
-            # Health check handler setup
-            # The metrics collector is initialized in on_startup, which is called by dp.startup.
-            # So, at this point, after setup_application, we can assume on_startup has run and metrics are available.
-            async def get_metrics_for_health_check():
-                metrics_data = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
-                return metrics_data.get('metrics_collector') if metrics_data else None
-
-            # Create a simple health check handler that retrieves metrics on demand
-            async def health_check_wrapper(request: web.Request) -> web.Response:
-                metrics_collector_instance = await get_metrics_for_health_check()
-                if metrics_collector_instance:
-                    handler = create_health_check_handler(metrics_collector_instance)
-                    return await handler(request)
-                else:
-                    logger.warning("MetricsCollector not available for health check.")
-                    return web.json_response({"status": "error", "message": "Metrics not initialized"}, status=500)
-
-            app.router.add_get('/health', health_check_wrapper)
-
-            try:
-                web.run_app(
-                    app,
-                    host=run_host,
-                    port=run_port,
-                    ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None,
-                    loop=loop
-                )
-                logger.info("Web server stopped.") # This log indicates normal shutdown, not an error
-            except Exception as e:
-                logger.error(f"Error running web application: {e}", exc_info=True)
-                raise
+            loop.run_until_complete(setup_webhook_and_run_app())
         else:
             # In polling mode, we need to run the dispatcher directly
             logger.info("Starting bot in polling mode...")
