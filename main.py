@@ -290,9 +290,17 @@ if __name__ == "__main__":
 
             # Manually register webhook handler on application router
             async def aiogram_webhook_handler(request: web.Request):
-                update = types.Update.model_validate_json(await request.text())
-                await dp.feed_webhook_update(bot, update)
-                return web.Response(text="OK")
+                try:
+                    update_json = await request.text()
+                    logger.info(f"Received webhook update: {update_json}")
+                    update = types.Update.model_validate_json(update_json)
+                    logger.info(f"Parsed update: {update}")
+                    await dp.feed_webhook_update(bot, update)
+                    logger.info("Update processed successfully")
+                    return web.Response(text="OK")
+                except Exception as e:
+                    logger.error(f"Error processing webhook update: {e}", exc_info=True)
+                    raise
 
             app.router.add_post(webhook_path, aiogram_webhook_handler)
 
