@@ -288,13 +288,13 @@ if __name__ == "__main__":
                 logger.error(f"Failed to set webhook: {e}")
                 raise
 
-            # Setup aiogram-aiohttp integration
-            setup_application(
-                app,
-                dp,
-                bot=bot,
-                path=webhook_path,
-            )
+            # Manually register webhook handler on application router
+            async def aiogram_webhook_handler(request: web.Request):
+                update = types.Update.model_validate_json(await request.text())
+                await dp.process_update(bot, update)
+                return web.Response(text="OK")
+
+            app.router.add_post(webhook_path, aiogram_webhook_handler)
 
             # Health check handler setup
             # The metrics collector is initialized in on_startup, which is called by dp.startup.
@@ -314,7 +314,6 @@ if __name__ == "__main__":
                     return web.json_response({"status": "error", "message": "Metrics not initialized"}, status=500)
 
             app.router.add_get('/health', health_check_wrapper)
-
 
             try:
                 web.run_app(
@@ -353,7 +352,6 @@ if __name__ == "__main__":
                         logger.info("Event loop closed in polling cleanup.")
                 except Exception as loop_error:
                     logger.error(f"Error closing event loop: {loop_error}", exc_info=True)
-
 
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
