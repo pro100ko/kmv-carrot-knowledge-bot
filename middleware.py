@@ -290,34 +290,59 @@ class UserActivityMiddleware(BaseMiddleware):
         user = event.from_user
         
         try:
+            # Get database pool from storage
+            storage_data = await data['dispatcher'].storage.get_data(key=STORAGE_KEYS['db_pool'])
+            if not storage_data or 'db_pool' not in storage_data:
+                logger.error("Database pool not found in storage")
+                return await handler(event, data)
+            
             # Get current timestamp
             now = datetime.now().isoformat()
             
-            # Update user activity
-            db.register_user({
-                'telegram_id': user_id,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-                'username': user.username,
-                'last_active': now
-            })
+            # Update user activity asynchronously
+            try:
+                # Get user from database first
+                user_data = await sqlite_db.db.get_user(user_id)
+                if not user_data:
+                    # Register new user if not exists
+                    await sqlite_db.db.register_user({
+                        'telegram_id': user_id,
+                        'username': user.username,
+                        'first_name': user.first_name,
+                        'last_name': user.last_name,
+                        'role': UserRole.ADMIN.value if user_id in ADMIN_IDS else UserRole.USER.value,
+                        'last_active': now
+                    })
+                    logger.info(f"Registered new user {user_id} in middleware")
+                else:
+                    # Update existing user's activity
+                    await sqlite_db.db.register_user({
+                        'telegram_id': user_id,
+                        'last_active': now
+                    })
+                    logger.debug(f"Updated activity for user {user_id}")
+            except Exception as db_error:
+                logger.error(f"Failed to update user activity in middleware: {db_error}", exc_info=True)
+                # Continue processing even if activity update fails
             
             # Log user activity
             if isinstance(event, Message):
-                user_logger.info(
+                logger.info(
                     f"User {user_id} ({user.username or user.first_name}) "
-                    f"sent message: {event.text[:100]}..."
+                    f"sent message: {event.text[:100] if event.text else 'non-text message'}..."
                 )
             else:  # CallbackQuery
-                user_logger.info(
+                logger.info(
                     f"User {user_id} ({user.username or user.first_name}) "
                     f"pressed button: {event.data}"
                 )
             
+            # Continue with handler
             return await handler(event, data)
             
         except Exception as e:
-            user_logger.error(f"User activity tracking error for user {user_id}: {e}")
+            logger.error(f"User activity middleware error for user {user_id}: {e}", exc_info=True)
+            # Continue with handler even if middleware fails
             return await handler(event, data)
 
 class RateLimitMiddleware(BaseMiddleware):

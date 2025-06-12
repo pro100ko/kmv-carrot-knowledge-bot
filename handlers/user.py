@@ -9,6 +9,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.dispatcher import Dispatcher
 
 from sqlite_db import db, UserRole
 from utils.db_pool import DatabasePool
@@ -38,38 +39,57 @@ class UserStates(StatesGroup):
     waiting_for_confirmation = State()
 
 @router.message(Command("start"))
-async def start_handler(message: Message) -> None:
+async def start_handler(message: Message, dispatcher: Dispatcher) -> None:
     """Handle /start command - register new users and send welcome message."""
-    logger.info(f"Received /start command from user {message.from_user.id}")
+    logger.info(f"Start handler called for user {message.from_user.id}")
     try:
+        # Get database pool from storage
+        storage_data = await dispatcher.storage.get_data(key=STORAGE_KEYS['db_pool'])
+        if not storage_data or 'db_pool' not in storage_data:
+            logger.error("Database pool not found in storage")
+            await message.answer("Произошла ошибка при инициализации базы данных. Пожалуйста, попробуйте позже.")
+            return
+
         # Get user from database
         logger.info(f"Attempting to get user {message.from_user.id} from database")
-        user = await db.get_user(message.from_user.id)
-        logger.info(f"Database query result for user {message.from_user.id}: {user}")
+        try:
+            user = await db.get_user(message.from_user.id)
+            logger.info(f"Database query result for user {message.from_user.id}: {user}")
+        except Exception as db_error:
+            logger.error(f"Database error while getting user {message.from_user.id}: {db_error}", exc_info=True)
+            raise
 
         # Register new user if not exists
         if not user:
             logger.info(f"User {message.from_user.id} not found, registering new user")
-            user_data = {
-                "telegram_id": message.from_user.id,
-                "username": message.from_user.username or message.from_user.first_name,
-                "first_name": message.from_user.first_name,
-                "last_name": message.from_user.last_name,
-                "role": UserRole.ADMIN.value if message.from_user.id in ADMIN_IDS else UserRole.USER.value
-            }
-            await db.register_user(user_data)
-            logger.info(f"Successfully registered new user {message.from_user.id}")
-            user = await db.get_user(message.from_user.id)
-            logger.info(f"Retrieved newly registered user data: {user}")
+            try:
+                user_data = {
+                    "telegram_id": message.from_user.id,
+                    "username": message.from_user.username or message.from_user.first_name,
+                    "first_name": message.from_user.first_name,
+                    "last_name": message.from_user.last_name,
+                    "role": UserRole.ADMIN.value if message.from_user.id in ADMIN_IDS else UserRole.USER.value
+                }
+                await db.register_user(user_data)
+                logger.info(f"Successfully registered new user {message.from_user.id}")
+                user = await db.get_user(message.from_user.id)
+                logger.info(f"Retrieved newly registered user data: {user}")
+            except Exception as reg_error:
+                logger.error(f"Error registering new user {message.from_user.id}: {reg_error}", exc_info=True)
+                raise
 
         # Update user activity
         if ENABLE_USER_ACTIVITY_TRACKING:
             logger.info(f"Updating last active timestamp for user {message.from_user.id}")
-            await db.register_user({
-                "telegram_id": message.from_user.id,
-                "last_active": datetime.now().isoformat()
-            })
-            logger.info(f"Updated last active timestamp for user {message.from_user.id}")
+            try:
+                await db.register_user({
+                    "telegram_id": message.from_user.id,
+                    "last_active": datetime.now().isoformat()
+                })
+                logger.info(f"Updated last active timestamp for user {message.from_user.id}")
+            except Exception as activity_error:
+                logger.error(f"Error updating user activity for {message.from_user.id}: {activity_error}", exc_info=True)
+                # Continue even if activity update fails
 
         # Get user role
         user_role = user.get('role', 'user')
@@ -77,39 +97,47 @@ async def start_handler(message: Message) -> None:
 
         # Send welcome message
         logger.info(f"Preparing welcome message for user {message.from_user.id}")
-        if user_role == UserRole.ADMIN.value:
-            welcome_text = (
-                "👋 Добро пожаловать в панель администратора!\n\n"
-                "Доступные команды:\n"
-                "/catalog - Управление каталогом\n"
-                "/tests - Управление тестами\n"
-                "/stats - Просмотр статистики\n"
-                "/broadcast - Рассылка сообщений\n"
-                "/help - Справка по командам"
-            )
-            keyboard = get_admin_menu_keyboard()
-        else:
-            welcome_text = (
-                "👋 Добро пожаловать в бот знаний!\n\n"
-                "Доступные команды:\n"
-                "/catalog - Просмотр каталога\n"
-                "/tests - Пройти тесты\n"
-                "/help - Справка по командам"
-            )
-            keyboard = get_main_menu_keyboard()
+        try:
+            if user_role == UserRole.ADMIN.value:
+                welcome_text = (
+                    "👋 Добро пожаловать в панель администратора!\n\n"
+                    "Доступные команды:\n"
+                    "/catalog - Управление каталогом\n"
+                    "/tests - Управление тестами\n"
+                    "/stats - Просмотр статистики\n"
+                    "/broadcast - Рассылка сообщений\n"
+                    "/help - Справка по командам"
+                )
+                keyboard = get_admin_menu_keyboard()
+            else:
+                welcome_text = (
+                    "👋 Добро пожаловать в бот знаний!\n\n"
+                    "Доступные команды:\n"
+                    "/catalog - Просмотр каталога\n"
+                    "/tests - Пройти тесты\n"
+                    "/help - Справка по командам"
+                )
+                keyboard = get_main_menu_keyboard()
 
-        logger.info(f"Sending welcome message to user {message.from_user.id}")
-        await message.answer(welcome_text, reply_markup=keyboard)
-        logger.info(f"Welcome message sent successfully to user {message.from_user.id}")
+            logger.info(f"Sending welcome message to user {message.from_user.id}")
+            await message.answer(welcome_text, reply_markup=keyboard)
+            logger.info(f"Welcome message sent successfully to user {message.from_user.id}")
 
-        # Track metrics
-        logger.info(f"Tracking metrics for user {message.from_user.id}")
-        metrics_collector.increment_message_count()
-        logger.info(f"Metrics incremented for user {message.from_user.id}")
+            # Track metrics
+            logger.info(f"Tracking metrics for user {message.from_user.id}")
+            metrics_collector.increment_message_count()
+            logger.info(f"Metrics incremented for user {message.from_user.id}")
+
+        except Exception as msg_error:
+            logger.error(f"Error sending welcome message to user {message.from_user.id}: {msg_error}", exc_info=True)
+            raise
 
     except Exception as e:
-        logger.error(f"Error in start_handler for user {message.from_user.id}: {e}", exc_info=True)
-        await message.answer("Произошла ошибка при обработке команды. Пожалуйста, попробуйте позже.")
+        logger.error(f"Critical error in start_handler for user {message.from_user.id}: {e}", exc_info=True)
+        try:
+            await message.answer("Произошла ошибка при обработке команды. Пожалуйста, попробуйте позже.")
+        except Exception as final_error:
+            logger.error(f"Failed to send error message to user {message.from_user.id}: {final_error}", exc_info=True)
         raise
 
 @router.message(Command("help"))
