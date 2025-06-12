@@ -290,8 +290,8 @@ logger.info(f"Binding to port: {config.WEBAPP_PORT}\n")
 async def setup_webhook_and_run_app():
     """Setup webhook and run the application."""
     # Get host and port
-    run_host = '0.0.0.0' # Render requires binding to 0.0.0.0
-    run_port = int(os.getenv('PORT', '8000')) # Fallback to 8000 if PORT env var is not set (unlikely on Render)
+    run_host = '0.0.0.0'  # Render requires binding to 0.0.0.0
+    run_port = int(os.getenv('PORT', '8000'))  # Fallback to 8000 if PORT env var is not set
 
     logger.info("Starting aiohttp web server...")
     logger.info(f"Binding to host: {run_host}, port: {run_port}")
@@ -317,22 +317,15 @@ async def setup_webhook_and_run_app():
     logger.info(f"Full webhook URL: {webhook_url}")
 
     try:
-        # First, run startup handlers to initialize everything
-        logger.info("Running startup handlers...")
-        await on_startup(bot, dp)
-        logger.info("Startup handlers completed successfully")
-
-        # Then set webhook using aiogram's built-in method
-        await bot.set_webhook(
-            url=webhook_url,
-            allowed_updates=config.ALLOWED_UPDATES,
-            drop_pending_updates=True
-        )
-        logger.info("Webhook set successfully")
-
-        # Setup application with aiogram's built-in handler
+        # Setup application with aiogram's built-in handler first
         setup_application(app, dp, bot=bot, path=webhook_path)
         logger.info("Webhook handler setup completed")
+
+        # Add a simple root handler for health checks
+        async def root_handler(request):
+            return web.Response(text="Bot is running", status=200)
+        app.router.add_get('/', root_handler)
+        logger.info("Root handler added")
 
         # Try to get metrics collector from storage and add health check handler if available
         try:
@@ -346,11 +339,13 @@ async def setup_webhook_and_run_app():
         except Exception as metrics_error:
             logger.warning(f"Could not setup health check handler: {metrics_error}")
 
-        # Add a simple root handler for health checks
-        async def root_handler(request):
-            return web.Response(text="Bot is running", status=200)
-        app.router.add_get('/', root_handler)
-        logger.info("Root handler added")
+        # Set webhook using aiogram's built-in method
+        await bot.set_webhook(
+            url=webhook_url,
+            allowed_updates=config.ALLOWED_UPDATES,
+            drop_pending_updates=True
+        )
+        logger.info("Webhook set successfully")
 
         # Run the application
         await web._run_app(
@@ -363,6 +358,18 @@ async def setup_webhook_and_run_app():
     except Exception as e:
         logger.error(f"Failed to setup webhook: {e}", exc_info=True)
         raise
+    finally:
+        # Ensure proper cleanup
+        try:
+            # Get database pool from storage
+            db_pool_data = await dp.storage.get_data(key=STORAGE_KEYS['db_pool'])
+            if db_pool_data and 'db_pool' in db_pool_data:
+                db_pool = db_pool_data['db_pool']
+                if hasattr(db_pool, 'close'):
+                    await db_pool.close()
+                    logger.info("Database pool closed in cleanup")
+        except Exception as cleanup_error:
+            logger.error(f"Error during cleanup: {cleanup_error}")
 
 if __name__ == "__main__":
     try:
@@ -383,6 +390,10 @@ if __name__ == "__main__":
             # In polling mode, we need to run the dispatcher directly
             logger.info("Starting bot in polling mode...")
             try:
+                # Run startup handlers first
+                loop.run_until_complete(on_startup(bot, dp))
+                
+                # Then start polling
                 loop.create_task(dp.start_polling(
                     bot,
                     allowed_updates=config.ALLOWED_UPDATES,
@@ -390,13 +401,18 @@ if __name__ == "__main__":
                 ))
                 # Run the event loop
                 logger.info("Bot in polling mode started. Running event loop forever.")
-                loop.run_forever() # Keep the loop running for background tasks
+                loop.run_forever()
             except KeyboardInterrupt:
                 logger.info("Received shutdown signal, stopping bot...")
             except Exception as e:
                 logger.error(f"Error in polling mode: {e}", exc_info=True)
             finally:
                 logger.info("Polling mode cleanup completed.")
+                # Run shutdown handlers
+                try:
+                    loop.run_until_complete(on_shutdown(bot, dp))
+                except Exception as shutdown_error:
+                    logger.error(f"Error during shutdown: {shutdown_error}")
                 # Close the event loop
                 try:
                     if not loop.is_closed():
