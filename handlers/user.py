@@ -4,12 +4,11 @@ import logging
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 
-from aiogram import Router, F
+from aiogram import Router, F, Dispatcher
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.dispatcher import Dispatcher
 
 from sqlite_db import db, UserRole
 from utils.db_pool import DatabasePool
