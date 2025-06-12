@@ -317,7 +317,12 @@ async def setup_webhook_and_run_app():
     logger.info(f"Full webhook URL: {webhook_url}")
 
     try:
-        # Set webhook using aiogram's built-in method
+        # First, run startup handlers to initialize everything
+        logger.info("Running startup handlers...")
+        await on_startup(bot, dp)
+        logger.info("Startup handlers completed successfully")
+
+        # Then set webhook using aiogram's built-in method
         await bot.set_webhook(
             url=webhook_url,
             allowed_updates=config.ALLOWED_UPDATES,
@@ -340,6 +345,12 @@ async def setup_webhook_and_run_app():
                 logger.warning("Metrics collector not found in storage, health check handler not added")
         except Exception as metrics_error:
             logger.warning(f"Could not setup health check handler: {metrics_error}")
+
+        # Add a simple root handler for health checks
+        async def root_handler(request):
+            return web.Response(text="Bot is running", status=200)
+        app.router.add_get('/', root_handler)
+        logger.info("Root handler added")
 
         # Run the application
         await web._run_app(
