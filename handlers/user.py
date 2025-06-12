@@ -37,59 +37,85 @@ class UserStates(StatesGroup):
     waiting_for_confirmation = State()
 
 @router.message(Command("start"))
-async def start_handler(message: Message, state: FSMContext) -> None:
-    """Handle /start command."""
-    user_id = message.from_user.id
-    is_admin = user_id in ADMIN_IDS
-    
-    # Get or create user
-    user = await db.get_user(user_id)
-    if not user:
-        # Register new user
-        user_data = {
-            "telegram_id": user_id,
-            "username": message.from_user.username,
-            "first_name": message.from_user.first_name,
-            "last_name": message.from_user.last_name,
-            "role": UserRole.ADMIN.value if is_admin else UserRole.USER.value
-        }
-        await db.register_user(user_data)
-        logger.info(f"New user registered: {user_id}")
-    
-    # Update user activity
-    if ENABLE_USER_ACTIVITY_TRACKING:
-        await db.register_user({
-            "telegram_id": user_id,
-            "last_active": datetime.now().isoformat()
-        })
-    
-    # Track metrics
-    metrics_collector.increment_message_count()
-    
-    # Send welcome message
-    welcome_text = (
-        "👋 Добро пожаловать в Корпоративную Базу Знаний!\n\n"
-        "Я помогу вам изучить нашу продукцию и пройти тестирование.\n\n"
-    )
-    
-    if is_admin:
-        welcome_text += (
-            "🔐 Вы авторизованы как администратор.\n"
-            "Используйте /admin для доступа к панели управления."
+async def start_handler(message: Message, db_pool: DatabasePool) -> None:
+    """Handle /start command - register new users and send welcome message."""
+    logger.info(f"Received /start command from user {message.from_user.id}")
+    try:
+        # Get user from database
+        logger.info(f"Attempting to get user {message.from_user.id} from database")
+        user = await db_pool.execute_query(
+            "SELECT * FROM users WHERE telegram_id = ?",
+            (message.from_user.id,)
         )
-        keyboard = get_admin_menu_keyboard()
-    else:
-        welcome_text += (
-            "📚 Доступные команды:\n"
-            "/catalog - Просмотр каталога продукции\n"
-            "/search - Поиск по базе знаний\n"
-            "/tests - Доступные тесты\n"
-            "/help - Справка по использованию бота"
+        logger.info(f"Database query result for user {message.from_user.id}: {user}")
+
+        # Register new user if not exists
+        if not user:
+            logger.info(f"User {message.from_user.id} not found, registering new user")
+            username = message.from_user.username or message.from_user.first_name
+            await db_pool.execute_query(
+                """
+                INSERT INTO users (telegram_id, username, role, created_at, last_active)
+                VALUES (?, ?, 'user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                (message.from_user.id, username)
+            )
+            logger.info(f"Successfully registered new user {message.from_user.id}")
+            user = await db_pool.execute_query(
+                "SELECT * FROM users WHERE telegram_id = ?",
+                (message.from_user.id,)
+            )
+            logger.info(f"Retrieved newly registered user data: {user}")
+
+        # Update last active timestamp
+        logger.info(f"Updating last active timestamp for user {message.from_user.id}")
+        await db_pool.execute_query(
+            "UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE telegram_id = ?",
+            (message.from_user.id,)
         )
-        keyboard = get_main_menu_keyboard()
-    
-    await message.answer(welcome_text, reply_markup=keyboard)
-    await state.clear()
+        logger.info(f"Updated last active timestamp for user {message.from_user.id}")
+
+        # Get user role
+        user_role = user[0]['role'] if user else 'user'
+        logger.info(f"User {message.from_user.id} has role: {user_role}")
+
+        # Send welcome message
+        logger.info(f"Preparing welcome message for user {message.from_user.id}")
+        if user_role == 'admin':
+            welcome_text = (
+                "👋 Добро пожаловать в панель администратора!\n\n"
+                "Доступные команды:\n"
+                "/catalog - Управление каталогом\n"
+                "/tests - Управление тестами\n"
+                "/stats - Просмотр статистики\n"
+                "/broadcast - Рассылка сообщений\n"
+                "/help - Справка по командам"
+            )
+        else:
+            welcome_text = (
+                "👋 Добро пожаловать в бот знаний!\n\n"
+                "Доступные команды:\n"
+                "/catalog - Просмотр каталога\n"
+                "/tests - Пройти тесты\n"
+                "/help - Справка по командам"
+            )
+        logger.info(f"Sending welcome message to user {message.from_user.id}")
+        await message.answer(welcome_text)
+        logger.info(f"Welcome message sent successfully to user {message.from_user.id}")
+
+        # Track metrics
+        logger.info(f"Tracking metrics for user {message.from_user.id}")
+        metrics = message.bot.get('metrics_collector')
+        if metrics:
+            metrics.increment_messages()
+            logger.info(f"Metrics incremented for user {message.from_user.id}")
+        else:
+            logger.warning(f"Metrics collector not found for user {message.from_user.id}")
+
+    except Exception as e:
+        logger.error(f"Error in start_handler for user {message.from_user.id}: {e}", exc_info=True)
+        await message.answer("Произошла ошибка при обработке команды. Пожалуйста, попробуйте позже.")
+        raise
 
 @router.message(Command("help"))
 async def help_handler(message: Message) -> None:

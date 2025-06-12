@@ -79,36 +79,47 @@ async def on_startup(bot: Bot, dispatcher: Dispatcher) -> None:
         logger.info("Starting up application...")
 
         # Initialize database pool
+        logger.info("Initializing database pool...")
         new_db_pool = DatabasePool(
             db_file=config.DB_FILE,
             pool_size=config.DB_POOL_SIZE
         )
         await new_db_pool.initialize()
+        logger.info("Database pool initialized successfully")
 
         # Store db_pool in storage
+        logger.info("Storing database pool in dispatcher storage...")
         await dispatcher.storage.set_data(
             key=STORAGE_KEYS['db_pool'],
             data={'db_pool': new_db_pool}  # Wrap in dict
         )
+        logger.info("Database pool stored in dispatcher storage")
 
         # Initialize sqlite_db with the new pool
+        logger.info("Initializing sqlite_db with the new pool...")
         sqlite_db.initialize(new_db_pool)
+        logger.info("sqlite_db initialized with the new pool")
 
         # Initialize database and run migrations
         try:
+            logger.info("Initializing database and running migrations...")
             await sqlite_db.db.initialize()
+            logger.info("Database initialized and migrations completed successfully")
         except Exception as e:
-            logger.error(f"Database initialization failed: {e}")
+            logger.error(f"Database initialization failed: {e}", exc_info=True)
             raise
 
         # Initialize metrics collector
+        logger.info("Initializing metrics collector...")
         metrics = MetricsCollector()
         await dispatcher.storage.set_data(
             key=STORAGE_KEYS['metrics_collector'],
             data={'metrics_collector': metrics}  # Wrap in dict
         )
+        logger.info("Metrics collector initialized and stored")
 
         # Register middleware
+        logger.info("Registering middleware...")
         dispatcher.update.middleware(MetricsMiddleware())
         dispatcher.update.middleware(ErrorHandlingMiddleware())
         dispatcher.update.middleware(StateManagementMiddleware())
@@ -116,16 +127,30 @@ async def on_startup(bot: Bot, dispatcher: Dispatcher) -> None:
         dispatcher.update.middleware(AdminAccessMiddleware())
         dispatcher.update.middleware(UserActivityMiddleware())
         dispatcher.update.middleware(RateLimitMiddleware())
-        logger.info("Middleware registered")
+        logger.info("All middleware registered successfully")
 
         # Setup bot commands
+        logger.info("Setting up bot commands...")
         await setup_bot_commands(bot)
+        logger.info("Bot commands configured successfully")
 
         # Setup handlers
+        logger.info("Setting up handlers...")
+        logger.info("Setting up user handlers...")
         setup_user_handlers(dispatcher)
+        logger.info("User handlers registered")
+        
+        logger.info("Setting up catalog handlers...")
         setup_catalog_handlers(dispatcher)
+        logger.info("Catalog handlers registered")
+        
+        logger.info("Setting up test handlers...")
         setup_test_handlers(dispatcher)
+        logger.info("Test handlers registered")
+        
+        logger.info("Setting up admin handlers...")
         setup_admin_handlers(dispatcher)
+        logger.info("Admin handlers registered")
 
         logger.info("Application startup completed successfully")
     except Exception as e:
