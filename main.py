@@ -291,7 +291,7 @@ if __name__ == "__main__":
             # Manually register webhook handler on application router
             async def aiogram_webhook_handler(request: web.Request):
                 update = types.Update.model_validate_json(await request.text())
-                await dp.process_update(bot, update)
+                await dp.feed_webhook_update(bot, update)
                 return web.Response(text="OK")
 
             app.router.add_post(webhook_path, aiogram_webhook_handler)
