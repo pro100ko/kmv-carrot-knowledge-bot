@@ -286,7 +286,7 @@ dp.shutdown.register(on_shutdown)
 app = web.Application()
 
 logger.info("Starting aiohttp web application...\n")
-logger.info(f"Binding to port: {config.WEBAPP_PORT}\n")
+logger.info(f"Binding to port: {config.PORT}\n")
 
 async def setup_webhook_and_run_app():
     """Setup webhook and run the application."""
