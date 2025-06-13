@@ -23,6 +23,15 @@ from utils.error_handling import handle_errors, log_operation, validate_state
 
 logger = logging.getLogger(__name__)
 
+def get_handler_name(handler: Callable) -> str:
+    """Safely get handler name, handling functools.partial objects."""
+    if isinstance(handler, functools.partial):
+        # For partial objects, try to get the name of the wrapped function
+        if hasattr(handler.func, '__name__'):
+            return handler.func.__name__
+        return 'partial_handler'
+    return getattr(handler, '__name__', 'unknown_handler')
+
 class MetricsMiddleware(BaseMiddleware):
     """Middleware for collecting metrics."""
     
@@ -53,7 +62,7 @@ class MetricsMiddleware(BaseMiddleware):
             duration = time.time() - start_time
             metrics_collector.record_handler_operation(
                 handler=handler_name,
-                operation=handler.__name__,
+                operation=get_handler_name(handler),
                 duration=duration
             )
             metrics_collector.record_request_time(duration)
@@ -66,7 +75,7 @@ class MetricsMiddleware(BaseMiddleware):
             metrics_collector.increment_error_count(str(type(e).__name__))
             metrics_collector.record_handler_operation(
                 handler=handler_name,
-                operation=handler.__name__,
+                operation=get_handler_name(handler),
                 duration=duration,
                 error=str(e)
             )
@@ -85,7 +94,7 @@ class ErrorHandlingMiddleware(BaseMiddleware):
         try:
             return await handler(event, data)
         except Exception as e:
-            logger.error(f"Error in handler {handler.__name__}: {e}", exc_info=True)
+            logger.error(f"Error in handler {get_handler_name(handler)}: {e}", exc_info=True)
             metrics_collector.increment_error_count(str(type(e).__name__))
             
             # Try to send error message to user
@@ -170,7 +179,7 @@ class LoggingMiddleware(BaseMiddleware):
             # Record logging operation
             duration = time.time() - start_time
             metrics_collector.record_operation(
-                operation="logging",
+                operation=get_handler_name(handler),
                 duration=duration
             )
             
@@ -180,7 +189,7 @@ class LoggingMiddleware(BaseMiddleware):
             # Record logging error
             duration = time.time() - start_time
             metrics_collector.record_operation(
-                operation="logging",
+                operation=get_handler_name(handler),
                 duration=duration,
                 error=str(e)
             )

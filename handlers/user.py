@@ -38,10 +38,17 @@ class UserStates(StatesGroup):
     waiting_for_confirmation = State()
 
 @router.message(Command("start"))
-async def start_handler(message: Message, dispatcher: Dispatcher) -> None:
+async def start_handler(message: Message, data: Dict[str, Any]) -> None:
     """Handle /start command - register new users and send welcome message."""
     logger.info(f"Start handler called for user {message.from_user.id}")
     try:
+        # Get dispatcher from data
+        dispatcher = data.get('dispatcher')
+        if not dispatcher:
+            logger.error("Dispatcher not found in data")
+            await message.answer("Произошла ошибка при инициализации. Пожалуйста, попробуйте позже.")
+            return
+
         # Get database pool from storage
         storage_data = await dispatcher.storage.get_data(key=STORAGE_KEYS['db_pool'])
         if not storage_data or 'db_pool' not in storage_data:
