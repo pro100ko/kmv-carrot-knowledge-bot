@@ -317,8 +317,19 @@ async def setup_webhook_and_run_app():
     logger.info(f"Full webhook URL: {webhook_url}")
 
     try:
-        # Setup application with aiogram's built-in handler first
-        setup_application(app, dp, bot=bot, path=webhook_path)
+        # First, run startup handlers to initialize everything
+        logger.info("Running startup handlers...")
+        await on_startup(bot, dp)
+        logger.info("Startup handlers completed successfully")
+
+        # Setup application with aiogram's built-in handler
+        setup_application(
+            app,
+            dp,
+            bot=bot,
+            path=webhook_path,
+            allowed_updates=config.ALLOWED_UPDATES
+        )
         logger.info("Webhook handler setup completed")
 
         # Add a simple root handler for health checks
@@ -343,7 +354,8 @@ async def setup_webhook_and_run_app():
         await bot.set_webhook(
             url=webhook_url,
             allowed_updates=config.ALLOWED_UPDATES,
-            drop_pending_updates=True
+            drop_pending_updates=True,
+            secret_token=config.BOT_TOKEN  # Add secret token for additional security
         )
         logger.info("Webhook set successfully")
 
@@ -385,7 +397,16 @@ if __name__ == "__main__":
 
         # Run the application
         if config.ENABLE_WEBHOOK:
-            loop.run_until_complete(setup_webhook_and_run_app())
+            try:
+                loop.run_until_complete(setup_webhook_and_run_app())
+            except Exception as e:
+                logger.error(f"Error in webhook mode: {e}", exc_info=True)
+                # Try to cleanup on error
+                try:
+                    loop.run_until_complete(on_shutdown(bot, dp))
+                except Exception as shutdown_error:
+                    logger.error(f"Error during shutdown: {shutdown_error}")
+                raise
         else:
             # In polling mode, we need to run the dispatcher directly
             logger.info("Starting bot in polling mode...")
