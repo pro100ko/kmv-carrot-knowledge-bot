@@ -304,7 +304,9 @@ async def setup_webhook_and_run_app():
     elif webhook_host.startswith("http://"):
         webhook_host = webhook_host[7:]
 
-    webhook_url = f"https://{webhook_host}{config.WEBHOOK_PATH}"
+    # Use a fixed webhook path without the bot token
+    webhook_path = "/webhook"
+    webhook_url = f"https://{webhook_host}{webhook_path}"
     logger.info(f"Full webhook URL: {webhook_url}")
 
     try:
@@ -313,7 +315,7 @@ async def setup_webhook_and_run_app():
             app,
             dp,
             bot=bot,
-            path=config.WEBHOOK_PATH,
+            path=webhook_path,  # Use the fixed path
             allowed_updates=config.ALLOWED_UPDATES
         )
         logger.info("Webhook handler setup completed")
