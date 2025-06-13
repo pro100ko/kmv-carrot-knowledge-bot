@@ -7,11 +7,7 @@ import aiosqlite
 from contextlib import asynccontextmanager
 from functools import wraps
 
-from config import (
-    DB_FILE,
-    DB_POOL_SIZE,
-    MAX_MEMORY_USAGE_MB,
-)
+from config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -48,16 +44,17 @@ def with_connection(func: Callable) -> Callable:
 class DatabasePool:
     """Manages a pool of database connections."""
     
-    def __init__(self, db_file: str, pool_size: int = DB_POOL_SIZE):
+    def __init__(self, db_file: Optional[str] = None, pool_size: Optional[int] = None):
         """Initialize database pool.
         
         Args:
             db_file: Path to the SQLite database file
             pool_size: Maximum number of connections in the pool
         """
-        self.db_file = db_file
-        self.pool_size = pool_size
-        self.pool: asyncio.Queue[aiosqlite.Connection] = asyncio.Queue(maxsize=pool_size)
+        self.config = get_config()
+        self.db_file = db_file if db_file is not None else self.config.DB_FILE
+        self.pool_size = pool_size if pool_size is not None else self.config.DB_POOL_SIZE
+        self.pool: asyncio.Queue[aiosqlite.Connection] = asyncio.Queue(maxsize=self.pool_size)
         self.active_connections = 0
         self._lock = asyncio.Lock()
         self._initialized = False
