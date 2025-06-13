@@ -308,12 +308,7 @@ async def setup_webhook_and_run_app():
     logger.info(f"Full webhook URL: {webhook_url}")
 
     try:
-        # First, run startup handlers to initialize everything
-        logger.info("Running startup handlers...")
-        await on_startup(bot, dp)
-        logger.info("Startup handlers completed successfully")
-
-        # Setup application with aiogram's built-in handler
+        # Setup application with aiogram's built-in handler first
         setup_application(
             app,
             dp,
@@ -341,6 +336,11 @@ async def setup_webhook_and_run_app():
                     logger.warning("Metrics collector not found in storage, health check handler not added")
             except Exception as metrics_error:
                 logger.warning(f"Could not setup health check handler: {metrics_error}")
+
+        # Then run startup handlers to initialize everything
+        logger.info("Running startup handlers...")
+        await on_startup(bot, dp)
+        logger.info("Startup handlers completed successfully")
 
         # Set webhook using aiogram's built-in method
         await bot.set_webhook(
@@ -373,13 +373,7 @@ async def setup_webhook_and_run_app():
     finally:
         # Ensure proper cleanup
         try:
-            # Get database pool from storage
-            db_pool_data = await dp.storage.get_data(key=STORAGE_KEYS['db_pool'])
-            if db_pool_data and 'db_pool' in db_pool_data:
-                db_pool = db_pool_data['db_pool']
-                if hasattr(db_pool, 'close'):
-                    await db_pool.close()
-                    logger.info("Database pool closed in cleanup")
+            await on_shutdown(bot, dp)
         except Exception as cleanup_error:
             logger.error(f"Error during cleanup: {cleanup_error}")
 

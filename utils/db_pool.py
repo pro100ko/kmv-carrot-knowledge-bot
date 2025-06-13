@@ -139,13 +139,14 @@ class DatabasePool:
     async def _close_connection(self, conn: aiosqlite.Connection) -> None:
         """Safely close a database connection."""
         try:
-            if not conn.closed:
+            if hasattr(conn, 'close'):
                 await conn.close()
                 self.active_connections -= 1
                 logger.debug("Database connection closed")
         except Exception as e:
             logger.error(f"Error closing database connection: {e}")
-            raise
+            # Don't raise the error, just log it
+            pass
     
     async def close(self) -> None:
         """Close all connections in the pool."""
@@ -156,6 +157,8 @@ class DatabasePool:
                     await self._close_connection(conn)
                 except Exception as e:
                     logger.error(f"Error closing connection: {e}")
+                    # Don't raise the error, just log it
+                    pass
             self._initialized = False
             self.active_connections = 0
             logger.info("Database pool closed")
