@@ -337,11 +337,6 @@ async def setup_webhook_and_run_app():
             except Exception as metrics_error:
                 logger.warning(f"Could not setup health check handler: {metrics_error}")
 
-        # Then run startup handlers to initialize everything
-        logger.info("Running startup handlers...")
-        await on_startup(bot, dp)
-        logger.info("Startup handlers completed successfully")
-
         # Set webhook using aiogram's built-in method
         await bot.set_webhook(
             url=webhook_url,
@@ -359,7 +354,7 @@ async def setup_webhook_and_run_app():
             logger.error(f"Webhook URL mismatch. Expected: {webhook_url}, Got: {webhook_info.url}")
             raise RuntimeError("Webhook URL verification failed")
 
-        # Run the application
+        # Run the application - startup handlers will be called by aiohttp
         await web._run_app(
             app,
             host=config.HOST,
