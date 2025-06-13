@@ -289,7 +289,16 @@ logger.info("Starting aiohttp web application...\n")
 logger.info(f"Binding to port: {config.PORT}\n")
 
 async def setup_webhook_and_run_app():
-    """Setup webhook and run the application."""
+    """Sets up the webhook and runs the aiohttp application."""
+    bot = Bot(token=config.BOT_TOKEN, parse_mode=ParseMode.HTML)
+    dp = Dispatcher()
+
+    # Removed manual registration of startup/shutdown handlers
+    # aiogram.webhook.aiohttp_server.setup_application will handle this
+
+    # Create aiohttp web application
+    app = web.Application()
+
     logger.info("Starting aiohttp web server...")
     logger.info(f"Binding to host: {config.HOST}, port: {config.PORT}")
 
