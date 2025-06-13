@@ -88,6 +88,7 @@ async def on_startup(bot: Bot, dispatcher: Dispatcher) -> None:
             )
             await new_db_pool.initialize()
             logger.info("Database pool initialized successfully")
+            logger.info(f"Database file path: {config.DB_FILE}")
 
             # Store db_pool in storage
             logger.info("Storing database pool in dispatcher storage...")

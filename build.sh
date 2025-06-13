@@ -21,7 +21,6 @@ mkdir -p /opt/render/project/src/monitoring/data
 mkdir -p /opt/render/project/src/logs
 mkdir -p /opt/render/project/src/metrics
 mkdir -p /opt/render/project/src/backups
-mkdir -p /opt/render/project/src/data
 mkdir -p /opt/render/project/src/media/products
 mkdir -p /opt/render/project/src/media/categories
 mkdir -p /opt/render/project/src/media/tests

@@ -35,6 +35,8 @@ services:
         value: kmv-carrot-bot-secure-token-2024
       - key: WEBHOOK_PORT
         value: 10000
+      - key: DB_FILE
+        value: /data/bot.db
       - key: ENABLE_WEBHOOK
         value: "true"
       - key: ENABLE_POLLING
