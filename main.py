@@ -42,6 +42,9 @@ from utils.error_handling import handle_errors, log_operation
 from utils.resource_manager import resource_manager
 import sqlite_db
 
+# Get the configuration instance
+app_config = config.get_config()
+
 # Import handler setup functions
 from handlers.user import setup_user_handlers
 from handlers.catalog import setup_catalog_handlers
@@ -50,17 +53,17 @@ from handlers.admin import setup_admin_handlers
 
 # Configure logging
 logging.basicConfig(
-    level=config.LOG_LEVEL,
-    format=config.LOG_FORMAT,
-    filename=config.LOG_FILE if config.IS_PRODUCTION else None
+    level=app_config.LOG_LEVEL,
+    format=app_config.LOG_FORMAT,
+    filename=app_config.LOG_FILE if app_config.is_production() else None
 )
 logger = logging.getLogger(__name__)
 
-logger.info(f"Environment: {config.ENVIRONMENT}, IS_PRODUCTION: {config.IS_PRODUCTION}")
+logger.info(f"Environment: {app_config.ENVIRONMENT}, IS_PRODUCTION: {app_config.is_production()}")
 
 # Initialize bot
 bot = Bot(
-    token=config.BOT_TOKEN,
+    token=app_config.BOT_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
 
@@ -83,12 +86,12 @@ async def on_startup(bot: Bot, dispatcher: Dispatcher) -> None:
         logger.info("Initializing database pool...")
         try:
             new_db_pool = DatabasePool(
-                db_file=config.DB_FILE,
-                pool_size=config.DB_POOL_SIZE
+                db_file=app_config.DB_FILE,
+                pool_size=app_config.DB_POOL_SIZE
             )
             await new_db_pool.initialize()
             logger.info("Database pool initialized successfully")
-            logger.info(f"Database file path: {config.DB_FILE}")
+            logger.info(f"Database file path: {app_config.DB_FILE}")
 
             # Store db_pool in storage
             logger.info("Storing database pool in dispatcher storage...")
@@ -232,11 +235,11 @@ def handle_exception(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -
 
 def get_ssl_context() -> Optional[ssl.SSLContext]:
     """Create SSL context for webhook."""
-    if not config.WEBHOOK_SSL_CERT or not config.WEBHOOK_SSL_PRIV:
+    if not app_config.WEBHOOK_SSL_CERT or not app_config.WEBHOOK_SSL_PRIV:
         return None
     try:
         ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        ssl_context.load_cert_chain(config.WEBHOOK_SSL_CERT, config.WEBHOOK_SSL_PRIV)
+        ssl_context.load_cert_chain(app_config.WEBHOOK_SSL_CERT, app_config.WEBHOOK_SSL_PRIV)
         return ssl_context
     except Exception as e:
         logger.error(f"Failed to create SSL context: {e}", exc_info=True)
@@ -268,7 +271,7 @@ async def setup_bot_commands(bot: Bot) -> None:
         await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
 
         # Set admin commands for admin users
-        for admin_id in config.ADMIN_IDS:
+        for admin_id in app_config.ADMIN_IDS:
             await bot.set_my_commands(
                 commands + admin_commands,
                 scope=BotCommandScopeChat(chat_id=admin_id)
@@ -287,21 +290,21 @@ dp.shutdown.register(on_shutdown)
 app = web.Application()
 
 logger.info("Starting aiohttp web application...\n")
-logger.info(f"Binding to port: {config.PORT}\n")
+logger.info(f"Binding to port: {app_config.PORT}\n")
 
 async def setup_webhook_and_run_app(bot: Bot, dp: Dispatcher):
     """Sets up the webhook and runs the aiohttp application."""
     # Use globally defined bot and dp instances
 
     logger.info("Starting aiohttp web server...")
-    logger.info(f"Binding to host: {config.HOST}, port: {config.PORT}")
+    logger.info(f"Binding to host: {app_config.HOST}, port: {app_config.PORT}")
 
-    if not config.WEBHOOK_HOST:
+    if not app_config.WEBHOOK_HOST:
         logger.error("WEBHOOK_HOST or RENDER_EXTERNAL_URL environment variable is not set.")
         raise ValueError("WEBHOOK_HOST or RENDER_EXTERNAL_URL must be set in production.")
 
     # Ensure webhook_host doesn't have protocol prefix
-    webhook_host = config.WEBHOOK_HOST
+    webhook_host = app_config.WEBHOOK_HOST
     if webhook_host.startswith("https://"):
         webhook_host = webhook_host[8:]
     elif webhook_host.startswith("http://"):
@@ -317,7 +320,7 @@ async def setup_webhook_and_run_app(bot: Bot, dp: Dispatcher):
         webhook_requests_handler = SimpleRequestHandler(
             dispatcher=dp,
             bot=bot,
-            secret_token=config.WEBHOOK_SECRET,
+            secret_token=app_config.WEBHOOK_SECRET,
         )
         webhook_requests_handler.register(app, path=webhook_path)
         logger.info("Webhook handler setup completed")
@@ -333,7 +336,7 @@ async def setup_webhook_and_run_app(bot: Bot, dp: Dispatcher):
         logger.info("Root handler added")
 
         # Add health check handler if enabled
-        if config.ENABLE_HEALTH_CHECK:
+        if app_config.ENABLE_HEALTH_CHECK:
             try:
                 metrics_data = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
                 metrics_collector = metrics_data.get('metrics_collector') if metrics_data else None
@@ -349,8 +352,8 @@ async def setup_webhook_and_run_app(bot: Bot, dp: Dispatcher):
         logger.info(f"Setting webhook to: {webhook_url}")
         await bot.set_webhook(
             url=webhook_url,
-            allowed_updates=config.ALLOWED_UPDATES,
-            secret_token=config.WEBHOOK_SECRET,
+            allowed_updates=app_config.ALLOWED_UPDATES,
+            secret_token=app_config.WEBHOOK_SECRET,
         )
         logger.info("Webhook set successfully")
         webhook_info = await bot.get_webhook_info()
@@ -359,7 +362,7 @@ async def setup_webhook_and_run_app(bot: Bot, dp: Dispatcher):
         # Start the aiohttp web server
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, config.HOST, config.PORT)
+        site = web.TCPSite(runner, app_config.HOST, app_config.PORT)
         await site.start()
         logger.info("aiohttp web server started")
 
@@ -385,7 +388,7 @@ if __name__ == "__main__":
         loop.set_exception_handler(handle_exception)
 
         # Run the application
-        if config.ENABLE_WEBHOOK:
+        if app_config.ENABLE_WEBHOOK:
             try:
                 loop.run_until_complete(setup_webhook_and_run_app(bot, dp)) # Pass global bot and dp
             except Exception as e:
@@ -396,7 +399,7 @@ if __name__ == "__main__":
                 except Exception as shutdown_error:
                     logger.error(f"Error during shutdown: {shutdown_error}")
                 raise
-        elif config.ENABLE_POLLING:
+        elif app_config.ENABLE_POLLING:
             # In polling mode, we need to run the dispatcher directly
             logger.info("Starting bot in polling mode...")
             try:
@@ -406,7 +409,7 @@ if __name__ == "__main__":
                 # Then start polling
                 loop.create_task(dp.start_polling(
                     bot,
-                    allowed_updates=config.ALLOWED_UPDATES,
+                    allowed_updates=app_config.ALLOWED_UPDATES,
                     drop_pending_updates=True
                 ))
                 # Run the event loop
