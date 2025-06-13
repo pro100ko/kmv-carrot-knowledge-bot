@@ -12,7 +12,7 @@ import bcrypt
 from pathlib import Path
 import shutil
 
-from config import DB_FILE, DB_POOL_TIMEOUT, DB_BACKUP_DIR, DB_POOL_SIZE, DB_MIGRATIONS_DIR
+from config import get_config
 from utils.db_pool import with_connection
 from utils.resource_manager import log_execution_time
 
@@ -57,8 +57,9 @@ class DatabaseStats:
 
 class DatabasePool:
     """Connection pool for database connections"""
-    def __init__(self, pool_size: int = DB_POOL_SIZE):
-        self.pool_size = pool_size
+    def __init__(self):
+        self.config = get_config()
+        self.pool_size = self.config.DB_POOL_SIZE
         self.pool: List[aiosqlite.Connection] = []
         self._lock = asyncio.Lock()
         self._available = asyncio.Queue()
@@ -77,8 +78,8 @@ class DatabasePool:
                 # Create initial connections
                 for _ in range(self.pool_size):
                     conn = await aiosqlite.connect(
-                        DB_FILE,
-                        timeout=DB_POOL_TIMEOUT,
+                        self.config.DB_FILE,
+                        timeout=self.config.DB_POOL_TIMEOUT,
                         isolation_level=None  # Enable autocommit mode
                     )
                     conn.row_factory = aiosqlite.Row
@@ -134,6 +135,7 @@ class Database:
         """Initialize database connection"""
         self._pool = None # Will be set later
         self._initialized = False
+        self.config = get_config() # Получаем объект конфигурации
         
     def set_pool(self, pool):
         """Set the database pool instance."""
@@ -238,8 +240,8 @@ class Database:
         """Initialize database and run migrations"""
         try:
             # Ensure directories exist
-            os.makedirs(DB_BACKUP_DIR, exist_ok=True)
-            os.makedirs(DB_MIGRATIONS_DIR, exist_ok=True)
+            os.makedirs(self.config.DB_BACKUP_DIR, exist_ok=True)
+            os.makedirs(self.config.DB_MIGRATIONS_DIR, exist_ok=True)
             
             # Create backup before any schema changes
             await self._backup_database()
@@ -254,70 +256,53 @@ class Database:
 
     async def _backup_database(self):
         """Create a backup of the database"""
-        if not os.path.exists(DB_FILE):
+        if not self.config.DB_BACKUP_DIR:
+            logger.info("DB_BACKUP_DIR is not set. Skipping database backup.")
             return
-            
-        backup_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = os.path.join(DB_BACKUP_DIR, f"backup_{backup_time}.db")
         
+        backup_dir = Path(self.config.DB_BACKUP_DIR)
+        backup_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file = backup_dir / f"backup_{timestamp}.db"
+        source_db_file = Path(self.config.DB_FILE)
+
         try:
-            # Copy database file while it's still accessible
-            shutil.copy2(DB_FILE, backup_file)
+            # Copy the database file to the backup location
+            shutil.copy2(source_db_file, backup_file)
             logger.info(f"Database backup created: {backup_file}")
         except Exception as e:
-            logger.error(f"Failed to create database backup: {e}")
-            raise DatabaseError(f"Backup failed: {e}")
+            logger.error(f"Failed to create database backup: {e}", exc_info=True)
+            raise DatabaseError(f"Failed to create database backup: {e}")
+
+        # Clean up old backups
+        await self.cleanup_old_backups()
 
     async def _run_migrations(self):
-        """Run database migrations"""
-        try:
-            # Get current schema version
-            async with self._pool.acquire() as conn:
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS schema_version (
-                        version INTEGER PRIMARY KEY,
-                        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                
-                async with conn.cursor() as cursor:
-                    await cursor.execute(
-                        "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
-                    )
-                    version_row = await cursor.fetchone()
-                    current_version = version_row[0] if version_row else 0
+        """Run database migrations from files."""
+        migrations_dir = Path(self.config.DB_MIGRATIONS_DIR)
+        if not migrations_dir.exists():
+            logger.info(f"Migrations directory does not exist: {migrations_dir}. Skipping migrations.")
+            return
 
-            # Get all migration files
-            migration_files = sorted([
-                f for f in os.listdir(DB_MIGRATIONS_DIR)
-                if f.endswith('.sql') and f.startswith('migration_')
-            ])
+        logger.info(f"Running database migrations from {migrations_dir}")
+        migration_files = sorted(migrations_dir.glob("*.sql"))
 
-            # Apply migrations
-            for migration_file in migration_files:
-                version = int(migration_file.split('_')[1].split('.')[0])
-                if version > current_version:
-                    try:
-                        with open(os.path.join(DB_MIGRATIONS_DIR, migration_file)) as f:
-                            migration_sql = f.read()
+        if not migration_files:
+            logger.info("No migration files found. Skipping migrations.")
+            return
 
-                        async with self._pool.acquire() as conn:
-                            async with conn.cursor() as cursor:
-                                await cursor.executescript(migration_sql)
-                                await cursor.execute(
-                                    "INSERT INTO schema_version (version) VALUES (?)",
-                                    (version,)
-                                )
-                                await conn.commit()
-
-                        logger.info(f"Applied migration {version}")
-                    except Exception as e:
-                        logger.error(f"Migration {version} failed: {e}")
-                        raise DatabaseMigrationError(f"Migration {version} failed: {e}")
-
-        except Exception as e:
-            logger.error(f"Migration process failed: {e}")
-            raise DatabaseMigrationError(f"Migration process failed: {e}")
+        for migration_file in migration_files:
+            try:
+                logger.info(f"Applying migration: {migration_file.name}")
+                with open(migration_file, 'r') as f:
+                    script = f.read()
+                await self.execute(script)
+                logger.info(f"Migration {migration_file.name} applied successfully.")
+            except Exception as e:
+                logger.error(f"Failed to apply migration {migration_file.name}: {e}", exc_info=True)
+                raise DatabaseMigrationError(f"Failed to apply migration {migration_file.name}: {e}")
+        logger.info("All migrations applied successfully.")
 
     @asynccontextmanager
     async def transaction(self):
@@ -545,7 +530,7 @@ class Database:
         try:
             async with self._pool.acquire() as conn:
                 # Get database size
-                size = os.path.getsize(DB_FILE)
+                size = os.path.getsize(self.config.DB_FILE)
 
                 # Get last backup
                 backup_files = await self.get_backup_files()
@@ -625,9 +610,9 @@ class Database:
         """Get list of backup files"""
         try:
             backup_files = []
-            for file in os.listdir(DB_BACKUP_DIR):
+            for file in os.listdir(self.config.DB_BACKUP_DIR):
                 if file.startswith("backup_") and file.endswith(".db"):
-                    path = os.path.join(DB_BACKUP_DIR, file)
+                    path = os.path.join(self.config.DB_BACKUP_DIR, file)
                     timestamp = file[7:-3]  # Remove 'backup_' prefix and '.db' suffix
                     backup_files.append({
                         "path": path,
@@ -652,11 +637,21 @@ class Database:
             return False
 
 def build_schemas():
-    """Temporary placeholder to debug build_schemas ImportError"""
-    print("DEBUG: build_schemas was called!")
+    """Build database schemas (for initial setup)."""
+    # This function is typically for initial schema creation, not migrations.
+    # In a production environment, migrations handle schema updates.
+    # For SQLite, if the database file doesn't exist, it will be created by aiosqlite.connect().
+    # No explicit schema building needed here beyond what migrations handle.
+    pass
 
-# Синглтон экземпляр базы данных
+# Global database instance
 db = Database()
+
+def initialize(pool: DatabasePool):
+    """Initialize the global database instance with a given connection pool."""
+    db.set_pool(pool)
+    db.config = get_config() # Убедитесь, что config установлен для глобального экземпляра db
+    # Остальные настройки уже будут получены из self.config в DatabasePool и Database
 
 # Инициализация при импорте
 if __name__ == '__main__':
@@ -677,8 +672,3 @@ if __name__ == '__main__':
             logger.error("Database integrity check failed")
     except Exception as e:
         logger.error(f"Database test failed: {e}")
-
-# Initialization function to be called from main.py
-def initialize(pool):
-    """Initialize the database module with the pool."""
-    db.set_pool(pool)

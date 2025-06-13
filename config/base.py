@@ -32,6 +32,8 @@ class BaseConfig(BaseSettings):
     DB_POOL_SIZE: int = Field(default=5, ge=1, description="Database pool size")
     DB_POOL_TIMEOUT: int = Field(default=30, ge=1, description="Database pool timeout in seconds")
     DB_POOL_RECYCLE: int = Field(default=3600, ge=60, description="Database pool recycle time in seconds")
+    DB_BACKUP_DIR: Path = Field(default=Path("backups"), description="Database backup directory")
+    DB_MIGRATIONS_DIR: Path = Field(default=Path("migrations"), description="Database migrations directory")
     
     # Logging settings
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
@@ -88,6 +90,18 @@ class BaseConfig(BaseSettings):
         v.parent.mkdir(parents=True, exist_ok=True)
         return v
     
+    @validator("DB_BACKUP_DIR")
+    def validate_backup_dir(cls, v: Path) -> Path:
+        """Validate backup directory path."""
+        v.mkdir(parents=True, exist_ok=True)
+        return v
+    
+    @validator("DB_MIGRATIONS_DIR")
+    def validate_migrations_dir(cls, v: Path) -> Path:
+        """Validate migrations directory path."""
+        v.mkdir(parents=True, exist_ok=True)
+        return v
+    
     @validator("LOG_LEVEL")
     def validate_log_level(cls, v: str) -> str:
         """Validate logging level."""
@@ -106,14 +120,4 @@ class BaseConfig(BaseSettings):
     
     def is_testing(self) -> bool:
         """Check if running in testing."""
-        return self.ENVIRONMENT == "testing"
-
-@lru_cache()
-def get_config() -> BaseConfig:
-    """Get cached configuration instance."""
-    return BaseConfig()
-
-def reload_config() -> BaseConfig:
-    """Reload configuration."""
-    get_config.cache_clear()
-    return get_config() 
+        return self.ENVIRONMENT == "testing" 
