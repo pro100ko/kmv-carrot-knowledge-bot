@@ -1,7 +1,10 @@
 from aiogram import types
 from typing import List, Dict, Optional, Union
 from enum import Enum
-from config import ADMIN_IDS
+from config import get_config
+
+config = get_config()
+ADMIN_IDS = config.ADMIN_IDS
 
 class ButtonType(Enum):
     """Типы кнопок для унификации"""
