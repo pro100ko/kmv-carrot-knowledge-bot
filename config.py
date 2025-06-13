@@ -55,9 +55,10 @@ for directory in REQUIRED_DIRECTORIES:
     directory.mkdir(parents=True, exist_ok=True)
 
 # Webhook settings
-WEBHOOK_HOST = os.getenv('WEBHOOK_HOST') or os.getenv('RENDER_EXTERNAL_URL')
-WEBHOOK_PATH = os.getenv('WEBHOOK_PATH', f"/webhook/{BOT_TOKEN}")
-WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', 'kmv-carrot-bot-secure-token-2024')
+WEBHOOK_HOST = os.getenv("WEBHOOK_HOST", os.getenv("RENDER_EXTERNAL_URL", "localhost"))
+WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")  # Fixed path without bot token
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "kmv-carrot-bot-secure-token-2024")
+WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", "10000"))
 
 # SSL certificate handling
 WEBHOOK_SSL_CERT = os.getenv('WEBHOOK_SSL_CERT')
@@ -128,8 +129,8 @@ ENABLE_USER_ACTIVITY_TRACKING = os.getenv("ENABLE_USER_ACTIVITY_TRACKING", "true
 ENABLE_ADMIN_PANEL: bool = bool(ADMIN_IDS)
 ENABLE_TEST_SYSTEM = os.getenv("ENABLE_TEST_SYSTEM", "true").lower() == "true"
 ENABLE_PRODUCT_CATALOG = os.getenv("ENABLE_PRODUCT_CATALOG", "true").lower() == "true"
-ENABLE_WEBHOOK = os.getenv('ENABLE_WEBHOOK', 'true').lower() == 'true'
-ENABLE_POLLING = os.getenv('ENABLE_POLLING', 'false').lower() == 'true'
+ENABLE_WEBHOOK = os.getenv("ENABLE_WEBHOOK", "true").lower() == "true"
+ENABLE_POLLING = os.getenv("ENABLE_POLLING", "false").lower() == "true"
 ENABLE_HEALTH_CHECK = os.getenv('ENABLE_HEALTH_CHECK', 'true').lower() == 'true'
 
 # Session settings

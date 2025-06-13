@@ -30,11 +30,15 @@ services:
       - key: WEBHOOK_HOST
         sync: false
       - key: WEBHOOK_PATH
-        value: /webhook/${BOT_TOKEN}
+        value: /webhook
+      - key: WEBHOOK_SECRET
+        value: kmv-carrot-bot-secure-token-2024
       - key: WEBHOOK_PORT
         value: 10000
       - key: ENABLE_WEBHOOK
         value: "true"
+      - key: ENABLE_POLLING
+        value: "false"
       - key: ENABLE_METRICS
         value: "true"
       - key: LOG_LEVEL
