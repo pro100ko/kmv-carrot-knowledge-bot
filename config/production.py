@@ -32,19 +32,9 @@ class ProductionConfig(BaseConfig):
     # Feature flags
     ENABLE_METRICS: bool = Field(default=True, description="Always enable metrics in production")
     ENABLE_HEALTH_CHECK: bool = Field(default=True, description="Always enable health check in production")
-    
-    @classmethod
-    def validate_production_settings(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate production-specific settings."""
-        if not values.get("WEBHOOK_HOST"):
-            # Set default webhook host for Render
-            values["WEBHOOK_HOST"] = f"https://{values.get('BOT_TOKEN', '').split(':')[0]}.onrender.com"
-        
-        if values.get("ENABLE_POLLING"):
-            raise ValueError("Polling mode is not allowed in production")
-        
-        return values
+    ENABLE_POLLING: bool = Field(default=False, description="Polling mode is not allowed in production")
     
     class Config:
         """Pydantic config."""
-        env_prefix = "PROD_"  # Use PROD_ prefix for production settings 
+        env_prefix = "PROD_"  # Use PROD_ prefix for production settings
+        extra = "allow"  # Allow extra fields to support WEBHOOK_URL 

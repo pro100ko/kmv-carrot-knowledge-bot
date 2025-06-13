@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings
 from pathlib import Path
 import os
 from functools import lru_cache
+from urllib.parse import urlparse
 
 class BaseConfig(BaseSettings):
     """Base configuration class with validation."""
@@ -19,6 +20,7 @@ class BaseConfig(BaseSettings):
     WEBHOOK_PATH: str = Field(default="/webhook", description="Webhook path")
     WEBHOOK_SECRET: Optional[str] = Field(None, description="Webhook secret token")
     WEBHOOK_PORT: int = Field(default=10000, description="Webhook port")
+    WEBHOOK_URL: Optional[str] = Field(None, description="Full webhook URL (optional)")
     
     # Server settings
     HOST: str = Field(default="0.0.0.0", description="Server host")
@@ -70,12 +72,30 @@ class BaseConfig(BaseSettings):
             raise ValueError("ENVIRONMENT must be one of: development, production, testing")
         return v
     
-    @validator("WEBHOOK_HOST")
-    def validate_webhook_host(cls, v: Optional[str], values: Dict[str, Any]) -> Optional[str]:
-        """Validate webhook host in production."""
-        if values.get("ENVIRONMENT") == "production" and not v:
-            raise ValueError("WEBHOOK_HOST is required in production")
-        return v
+    @validator("WEBHOOK_HOST", pre=True)
+    def validate_webhook_host(cls, v: Optional[str], values: Dict[str, Any]) -> str:
+        """Validate and set webhook host."""
+        if values.get("ENVIRONMENT") == "production":
+            if not v:
+                # Extract bot name from token for Render
+                token = values.get("BOT_TOKEN", "")
+                if token:
+                    bot_name = token.split(":")[0]
+                    return f"https://{bot_name}.onrender.com"
+                raise ValueError("BOT_TOKEN is required to set WEBHOOK_HOST")
+            return v
+        return v or ""
+    
+    @validator("WEBHOOK_URL", pre=True)
+    def validate_webhook_url(cls, v: Optional[str], values: Dict[str, Any]) -> Optional[str]:
+        """Validate webhook URL."""
+        if v:
+            # If URL is provided, extract host
+            parsed = urlparse(v)
+            if parsed.scheme and parsed.netloc:
+                values["WEBHOOK_HOST"] = f"{parsed.scheme}://{parsed.netloc}"
+                return v
+        return None
     
     @validator("ADMIN_IDS", pre=True)
     def validate_admin_ids(cls, v: Union[List[int], str]) -> List[int]:
