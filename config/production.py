@@ -10,10 +10,6 @@ class ProductionConfig(BaseConfig):
     # Override defaults for production
     ENVIRONMENT: str = "production"
     
-    # Security settings
-    WEBHOOK_SSL_CERT: Path = Field(..., description="SSL certificate path")
-    WEBHOOK_SSL_PRIV: Path = Field(..., description="SSL private key path")
-    
     # Database settings
     DB_POOL_SIZE: int = Field(default=10, ge=5, description="Larger pool size for production")
     DB_POOL_TIMEOUT: int = Field(default=60, ge=30, description="Longer timeout for production")
@@ -40,11 +36,9 @@ class ProductionConfig(BaseConfig):
     @classmethod
     def validate_production_settings(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         """Validate production-specific settings."""
-        if not values.get("WEBHOOK_SSL_CERT") or not values.get("WEBHOOK_SSL_PRIV"):
-            raise ValueError("SSL certificate and private key are required in production")
-        
         if not values.get("WEBHOOK_HOST"):
-            raise ValueError("WEBHOOK_HOST is required in production")
+            # Set default webhook host for Render
+            values["WEBHOOK_HOST"] = f"https://{values.get('BOT_TOKEN', '').split(':')[0]}.onrender.com"
         
         if values.get("ENABLE_POLLING"):
             raise ValueError("Polling mode is not allowed in production")

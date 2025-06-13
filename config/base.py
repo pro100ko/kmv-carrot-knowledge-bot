@@ -17,7 +17,7 @@ class BaseConfig(BaseSettings):
     # Webhook settings
     WEBHOOK_HOST: Optional[str] = Field(None, description="Webhook host")
     WEBHOOK_PATH: str = Field(default="/webhook", description="Webhook path")
-    WEBHOOK_SECRET: str = Field(..., description="Webhook secret token")
+    WEBHOOK_SECRET: Optional[str] = Field(None, description="Webhook secret token")
     WEBHOOK_PORT: int = Field(default=10000, description="Webhook port")
     
     # Server settings
@@ -25,10 +25,10 @@ class BaseConfig(BaseSettings):
     PORT: int = Field(default=8000, description="Server port")
     
     # Admin settings
-    ADMIN_IDS: List[int] = Field(default_factory=list, description="List of admin user IDs")
+    ADMIN_IDS: Union[List[int], str] = Field(..., description="List of admin user IDs (comma-separated string or list)")
     
     # Database settings
-    DB_FILE: Path = Field(..., description="Database file path")
+    DB_FILE: Optional[Path] = Field(default=Path("bot.db"), description="Database file path")
     DB_POOL_SIZE: int = Field(default=5, ge=1, description="Database pool size")
     DB_POOL_TIMEOUT: int = Field(default=30, ge=1, description="Database pool timeout in seconds")
     DB_POOL_RECYCLE: int = Field(default=3600, ge=60, description="Database pool recycle time in seconds")
@@ -77,16 +77,38 @@ class BaseConfig(BaseSettings):
             raise ValueError("WEBHOOK_HOST is required in production")
         return v
     
-    @validator("ADMIN_IDS")
-    def validate_admin_ids(cls, v: List[int]) -> List[int]:
-        """Validate admin IDs."""
+    @validator("ADMIN_IDS", pre=True)
+    def validate_admin_ids(cls, v: Union[List[int], str]) -> List[int]:
+        """Validate and convert admin IDs to list of integers."""
+        if isinstance(v, str):
+            try:
+                # Split by comma and convert to integers
+                v = [int(x.strip()) for x in v.split(",") if x.strip()]
+            except ValueError:
+                raise ValueError("ADMIN_IDS must be a comma-separated list of integers")
+        
         if not v:
             raise ValueError("At least one ADMIN_ID is required")
+        
+        return v
+    
+    @validator("WEBHOOK_SECRET")
+    def validate_webhook_secret(cls, v: Optional[str], values: Dict[str, Any]) -> Optional[str]:
+        """Validate webhook secret in production."""
+        if values.get("ENVIRONMENT") == "production" and not v:
+            # Generate a random secret if not provided
+            import secrets
+            return secrets.token_urlsafe(32)
         return v
     
     @validator("DB_FILE")
-    def validate_db_file(cls, v: Path) -> Path:
+    def validate_db_file(cls, v: Optional[Path], values: Dict[str, Any]) -> Path:
         """Validate database file path."""
+        if v is None:
+            # Use default path in production
+            if values.get("ENVIRONMENT") == "production":
+                return Path("/opt/render/project/src/bot.db")
+            return Path("bot.db")
         v.parent.mkdir(parents=True, exist_ok=True)
         return v
     
