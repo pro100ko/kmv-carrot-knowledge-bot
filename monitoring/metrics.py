@@ -8,11 +8,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from collections import defaultdict
 from dataclasses import dataclass, field
-from config import (
-    METRICS_RETENTION_DAYS,
-    METRICS_COLLECTION_INTERVAL,
-    METRICS_CLEANUP_INTERVAL
-)
+from config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +37,7 @@ class MetricsCollector:
     
     def __init__(self):
         """Initialize metrics collector."""
+        self.config = get_config()
         self._start_time = datetime.now()
         self._message_count = 0
         self._callback_count = 0
@@ -223,35 +220,42 @@ class MetricsCollector:
                     )
                 
                 # Cleanup old metrics if needed
-                if datetime.now() - self._last_cleanup > timedelta(seconds=METRICS_CLEANUP_INTERVAL):
-                    self._cleanup_old_metrics()
-                    self._last_cleanup = datetime.now()
+                self._cleanup_old_metrics()
                 
-                await asyncio.sleep(METRICS_COLLECTION_INTERVAL)
+                await asyncio.sleep(self.config.METRICS_COLLECTION_INTERVAL)
                 
+            except asyncio.CancelledError:
+                logger.info("Metrics collection task cancelled")
+                break
             except Exception as e:
                 logger.error(f"Error collecting metrics: {e}")
-                await asyncio.sleep(METRICS_COLLECTION_INTERVAL)
+                await asyncio.sleep(self.config.METRICS_COLLECTION_INTERVAL) # Try again after interval
     
     def _cleanup_old_metrics(self):
-        """Clean up old metrics data."""
-        cutoff_time = datetime.now() - timedelta(days=METRICS_RETENTION_DAYS)
+        """Clean up metrics older than retention period."""
+        # Clean up old request times
+        retention_period = timedelta(days=self.config.METRICS_RETENTION_DAYS)
+        cutoff_time = datetime.now() - retention_period
+        self._request_times = [t for t in self._request_times if datetime.fromtimestamp(t) >= cutoff_time]
         
-        # Clean up handler metrics
-        for handler_metrics in self._handler_metrics.values():
-            for op_metrics in handler_metrics.operations.values():
-                if (op_metrics.last_error_time and
-                    op_metrics.last_error_time < cutoff_time):
-                    op_metrics.last_error = None
-                    op_metrics.last_error_time = None
-        
-        # Clean up operation metrics
+        # Clean up old operation metrics (example: only keep recent errors)
         for op_metrics in self._operation_metrics.values():
-            if (op_metrics.last_error_time and
-                op_metrics.last_error_time < cutoff_time):
+            if op_metrics.last_error_time and op_metrics.last_error_time < cutoff_time:
                 op_metrics.last_error = None
                 op_metrics.last_error_time = None
-
+        
+        # Clean up old handler operation metrics
+        for handler_metrics in self._handler_metrics.values():
+            for op, op_metrics in list(handler_metrics.operations.items()): # Iterate over copy to allow deletion
+                if op_metrics.last_error_time and op_metrics.last_error_time < cutoff_time:
+                    del handler_metrics.operations[op]
+        
+        # Periodically clean up old metrics if enabled
+        if datetime.now() - self._last_cleanup > timedelta(seconds=self.config.METRICS_CLEANUP_INTERVAL):
+            # Further cleanup for old data if needed
+            logger.debug("Performing deep cleanup of old metrics")
+            self._last_cleanup = datetime.now()
+    
     async def _wait_for_task(self):
         """Wait for the metrics collection task to complete."""
         try:
