@@ -319,17 +319,20 @@ async def setup_webhook_and_run_app():
     logger.info(f"Full webhook URL: {webhook_url}")
 
     try:
-        # Setup application with aiogram's built-in handler first
-        setup_application(
-            app,
-            dp,
+        # Create an instance of SimpleRequestHandler and register it with the aiohttp application
+        webhook_requests_handler = SimpleRequestHandler(
+            dispatcher=dp,
             bot=bot,
-            path=webhook_path,  # Use the fixed path
-            allowed_updates=config.ALLOWED_UPDATES
+            secret_token=config.WEBHOOK_SECRET,
         )
+        webhook_requests_handler.register(app, path=webhook_path)
         logger.info("Webhook handler setup completed")
 
-        # Add a simple root handler for health checks
+        # Mount dispatcher startup and shutdown hooks to aiohttp application
+        setup_application(app, dp, bot=bot)
+        logger.info("Application startup handlers mounted")
+
+        # Add a health check handler at the root path
         async def root_handler(request):
             return web.Response(text="Bot is running", status=200)
         app.router.add_get('/', root_handler)
@@ -348,40 +351,32 @@ async def setup_webhook_and_run_app():
             except Exception as metrics_error:
                 logger.warning(f"Could not setup health check handler: {metrics_error}")
 
-        # Set webhook using aiogram's built-in method
+        # Set webhook for the bot
+        logger.info(f"Setting webhook to: {webhook_url}")
         await bot.set_webhook(
             url=webhook_url,
             allowed_updates=config.ALLOWED_UPDATES,
-            drop_pending_updates=True,
-            secret_token=config.WEBHOOK_SECRET
+            secret_token=config.WEBHOOK_SECRET,
         )
         logger.info("Webhook set successfully")
-
-        # Verify webhook setup
         webhook_info = await bot.get_webhook_info()
         logger.info(f"Webhook info: {webhook_info}")
 
-        if webhook_info.url != webhook_url:
-            logger.error(f"Webhook URL mismatch. Expected: {webhook_url}, Got: {webhook_info.url}")
-            raise RuntimeError("Webhook URL verification failed")
+        # Start the aiohttp web server
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, config.HOST, config.PORT)
+        await site.start()
+        logger.info("aiohttp web server started")
 
-        # Run the application - startup handlers will be called by aiohttp
-        await web._run_app(
-            app,
-            host=config.HOST,
-            port=config.PORT,
-            ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None
-        )
-        logger.info("Web server stopped.")
+        # Keep the application running until interrupted
+        # This line is crucial for keeping the aiohttp server alive
+        await asyncio.Event().wait()
+
     except Exception as e:
-        logger.error(f"Failed to setup webhook: {e}", exc_info=True)
-        raise
-    finally:
-        # Ensure proper cleanup
-        try:
-            await on_shutdown(bot, dp)
-        except Exception as cleanup_error:
-            logger.error(f"Error during cleanup: {cleanup_error}")
+        logger.critical(f"Critical error during application startup: {e}", exc_info=True)
+        await on_shutdown(bot, dp) # Ensure cleanup on critical error
+        raise # Re-raise the exception to terminate the process
 
 if __name__ == "__main__":
     try:
