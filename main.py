@@ -288,16 +288,9 @@ app = web.Application()
 logger.info("Starting aiohttp web application...\n")
 logger.info(f"Binding to port: {config.PORT}\n")
 
-async def setup_webhook_and_run_app():
+async def setup_webhook_and_run_app(bot: Bot, dp: Dispatcher):
     """Sets up the webhook and runs the aiohttp application."""
-    bot = Bot(token=config.BOT_TOKEN, parse_mode=ParseMode.HTML)
-    dp = Dispatcher()
-
-    # Removed manual registration of startup/shutdown handlers
-    # aiogram.webhook.aiohttp_server.setup_application will handle this
-
-    # Create aiohttp web application
-    app = web.Application()
+    # Use globally defined bot and dp instances
 
     logger.info("Starting aiohttp web server...")
     logger.info(f"Binding to host: {config.HOST}, port: {config.PORT}")
@@ -393,7 +386,7 @@ if __name__ == "__main__":
         # Run the application
         if config.ENABLE_WEBHOOK:
             try:
-                loop.run_until_complete(setup_webhook_and_run_app())
+                loop.run_until_complete(setup_webhook_and_run_app(bot, dp)) # Pass global bot and dp
             except Exception as e:
                 logger.error(f"Error in webhook mode: {e}", exc_info=True)
                 # Try to cleanup on error
