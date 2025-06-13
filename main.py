@@ -51,7 +51,8 @@ from handlers.admin import setup_admin_handlers
 # Configure logging
 logging.basicConfig(
     level=config.LOG_LEVEL,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format=config.LOG_FORMAT,
+    filename=config.LOG_FILE if config.IS_PRODUCTION else None
 )
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ bot = Bot(
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
 
-# Initialize Dispatcher globally with storage
+# Initialize Dispatcher with storage
 dp = Dispatcher(storage=MemoryStorage())
 
 # Define storage keys
@@ -289,31 +290,21 @@ logger.info(f"Binding to port: {config.WEBAPP_PORT}\n")
 
 async def setup_webhook_and_run_app():
     """Setup webhook and run the application."""
-    # Get host and port
-    run_host = '0.0.0.0'  # Render requires binding to 0.0.0.0
-    run_port = int(os.getenv('PORT', '8000'))  # Fallback to 8000 if PORT env var is not set
-
     logger.info("Starting aiohttp web server...")
-    logger.info(f"Binding to host: {run_host}, port: {run_port}")
+    logger.info(f"Binding to host: {config.HOST}, port: {config.PORT}")
 
-    webhook_host = os.getenv("WEBHOOK_HOST") or os.getenv("RENDER_EXTERNAL_URL")
-    webhook_path = os.getenv("WEBHOOK_PATH", f"/webhook/{config.BOT_TOKEN}")
-
-    if not webhook_host:
+    if not config.WEBHOOK_HOST:
         logger.error("WEBHOOK_HOST or RENDER_EXTERNAL_URL environment variable is not set.")
         raise ValueError("WEBHOOK_HOST or RENDER_EXTERNAL_URL must be set in production.")
 
-    # Log webhook configuration
-    logger.info(f"Webhook host: {webhook_host}")
-    logger.info(f"Webhook path: {webhook_path}")
-
     # Ensure webhook_host doesn't have protocol prefix
+    webhook_host = config.WEBHOOK_HOST
     if webhook_host.startswith("https://"):
         webhook_host = webhook_host[8:]
     elif webhook_host.startswith("http://"):
         webhook_host = webhook_host[7:]
 
-    webhook_url = f"https://{webhook_host}{webhook_path}"
+    webhook_url = f"https://{webhook_host}{config.WEBHOOK_PATH}"
     logger.info(f"Full webhook URL: {webhook_url}")
 
     try:
@@ -327,7 +318,7 @@ async def setup_webhook_and_run_app():
             app,
             dp,
             bot=bot,
-            path=webhook_path,
+            path=config.WEBHOOK_PATH,
             allowed_updates=config.ALLOWED_UPDATES
         )
         logger.info("Webhook handler setup completed")
@@ -338,32 +329,41 @@ async def setup_webhook_and_run_app():
         app.router.add_get('/', root_handler)
         logger.info("Root handler added")
 
-        # Try to get metrics collector from storage and add health check handler if available
-        try:
-            metrics_data = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
-            metrics_collector = metrics_data.get('metrics_collector') if metrics_data else None
-            if metrics_collector:
-                app.router.add_get('/health', create_health_check_handler(metrics_collector))
-                logger.info("Health check handler added")
-            else:
-                logger.warning("Metrics collector not found in storage, health check handler not added")
-        except Exception as metrics_error:
-            logger.warning(f"Could not setup health check handler: {metrics_error}")
+        # Add health check handler if enabled
+        if config.ENABLE_HEALTH_CHECK:
+            try:
+                metrics_data = await dp.storage.get_data(key=STORAGE_KEYS['metrics_collector'])
+                metrics_collector = metrics_data.get('metrics_collector') if metrics_data else None
+                if metrics_collector:
+                    app.router.add_get('/health', create_health_check_handler(metrics_collector))
+                    logger.info("Health check handler added")
+                else:
+                    logger.warning("Metrics collector not found in storage, health check handler not added")
+            except Exception as metrics_error:
+                logger.warning(f"Could not setup health check handler: {metrics_error}")
 
         # Set webhook using aiogram's built-in method
         await bot.set_webhook(
             url=webhook_url,
             allowed_updates=config.ALLOWED_UPDATES,
             drop_pending_updates=True,
-            secret_token="kmv-carrot-bot-secure-token-2024"  # Using a simpler, allowed secret token
+            secret_token=config.WEBHOOK_SECRET
         )
         logger.info("Webhook set successfully")
+
+        # Verify webhook setup
+        webhook_info = await bot.get_webhook_info()
+        logger.info(f"Webhook info: {webhook_info}")
+
+        if webhook_info.url != webhook_url:
+            logger.error(f"Webhook URL mismatch. Expected: {webhook_url}, Got: {webhook_info.url}")
+            raise RuntimeError("Webhook URL verification failed")
 
         # Run the application
         await web._run_app(
             app,
-            host=run_host,
-            port=run_port,
+            host=config.HOST,
+            port=config.PORT,
             ssl_context=get_ssl_context() if config.WEBHOOK_SSL_CERT else None
         )
         logger.info("Web server stopped.")
@@ -407,7 +407,7 @@ if __name__ == "__main__":
                 except Exception as shutdown_error:
                     logger.error(f"Error during shutdown: {shutdown_error}")
                 raise
-        else:
+        elif config.ENABLE_POLLING:
             # In polling mode, we need to run the dispatcher directly
             logger.info("Starting bot in polling mode...")
             try:
@@ -441,6 +441,8 @@ if __name__ == "__main__":
                         logger.info("Event loop closed in polling cleanup.")
                 except Exception as loop_error:
                     logger.error(f"Error closing event loop: {loop_error}", exc_info=True)
+        else:
+            raise RuntimeError("Neither webhook nor polling mode is enabled")
 
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
