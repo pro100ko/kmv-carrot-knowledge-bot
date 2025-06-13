@@ -355,7 +355,7 @@ async def setup_webhook_and_run_app():
             url=webhook_url,
             allowed_updates=config.ALLOWED_UPDATES,
             drop_pending_updates=True,
-            secret_token=config.BOT_TOKEN  # Add secret token for additional security
+            secret_token="kmv-carrot-bot-secure-token-2024"  # Using a simpler, allowed secret token
         )
         logger.info("Webhook set successfully")
 
