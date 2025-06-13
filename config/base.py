@@ -1,7 +1,8 @@
 """Base configuration module with type hints and validation."""
 
 from typing import List, Optional, Dict, Any, Union
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field, validator
+from pydantic_settings import BaseSettings
 from pathlib import Path
 import os
 from functools import lru_cache
