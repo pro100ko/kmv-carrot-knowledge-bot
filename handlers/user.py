@@ -18,12 +18,16 @@ from utils.keyboards import (
     get_confirm_keyboard,
     get_back_keyboard
 )
-from config import (
-    ADMIN_IDS,
-    SESSION_TIMEOUT_MINUTES,
-    ENABLE_USER_ACTIVITY_TRACKING
-)
+from config import get_config
 from monitoring.metrics import metrics_collector
+
+# Load configuration
+config = get_config()
+
+# Access settings
+ADMIN_IDS = config.ADMIN_IDS
+SESSION_TIMEOUT_MINUTES = config.SESSION_TIMEOUT_MINUTES
+ENABLE_USER_ACTIVITY_TRACKING = config.ENABLE_USER_ACTIVITY_TRACKING
 
 # Configure logging
 logger = logging.getLogger(__name__)
