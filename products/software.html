@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Software Products - Corporate Knowledge Base</title>
+    <meta name="description" content="Software products and development tools">
+    <link rel="stylesheet" href="../styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .product-nav {
+            background: white;
+            padding: 1rem 0;
+            border-bottom: 1px solid #e5e7eb;
+            position: sticky;
+            top: 80px;
+            z-index: 999;
+        }
+        
+        .product-nav .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .product-nav-btn {
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            text-decoration: none;
+            color: #374151;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .product-nav-btn:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .products-section {
+            padding: 3rem 0;
+        }
+        
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .product-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            border: 1px solid #e5e7eb;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .product-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border-color: #667eea;
+        }
+        
+        .product-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .product-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .product-icon i {
+            font-size: 1.25rem;
+            color: white;
+        }
+        
+        .product-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin: 0;
+        }
+        
+        .product-version {
+            background: #10b981;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .product-description {
+            color: #6b7280;
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+        
+        .product-features {
+            list-style: none;
+            margin-bottom: 1.5rem;
+        }
+        
+        .product-features li {
+            padding: 0.25rem 0;
+            color: #4b5563;
+            position: relative;
+            padding-left: 1.5rem;
+        }
+        
+        .product-features li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-weight: bold;
+        }
+        
+        .product-actions {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+        
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+        }
+        
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+        
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            margin-bottom: 2rem;
+        }
+        
+        .back-link:hover {
+            color: #5a67d8;
+        }
+        
+        @media (max-width: 768px) {
+            .product-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .product-nav .container {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-graduation-cap"></i>
+                    <h1>Knowledge Base</h1>
+                </div>
+                <nav class="nav">
+                    <a href="../index.html" class="nav-link">Home</a>
+                    <a href="#search" class="nav-link">Search</a>
+                    <a href="#about" class="nav-link">About</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <div class="product-nav">
+        <div class="container">
+            <a href="#product-1" class="product-nav-btn">Product Manager Pro</a>
+            <a href="#product-2" class="product-nav-btn">Code Editor Plus</a>
+            <a href="#product-3" class="product-nav-btn">Database Manager</a>
+            <a href="#product-4" class="product-nav-btn">API Gateway</a>
+            <a href="#product-5" class="product-nav-btn">Testing Suite</a>
+            <a href="#product-6" class="product-nav-btn">Deployment Tool</a>
+        </div>
+    </div>
+
+    <main class="main">
+        <section class="products-section">
+            <div class="container">
+                <a href="../index.html" class="back-link">
+                    <i class="fas fa-arrow-left"></i>
+                    Back to Categories
+                </a>
+                
+                <h2>Software Products</h2>
+                <p>Comprehensive development tools and software solutions for modern teams.</p>
+
+                <div class="product-grid">
+                    <div class="product-card" id="product-1">
+                        <div class="product-header">
+                            <div class="product-icon">
+                                <i class="fas fa-tasks"></i>
+                            </div>
+                            <div>
+                                <h3 class="product-title">Product Manager Pro</h3>
+                                <span class="product-version">v2.1.0</span>
+                            </div>
+                        </div>
+                        <p class="product-description">
+                            Advanced project management tool with agile methodologies, sprint planning, and team collaboration features.
+                        </p>
+                        <ul class="product-features">
+                            <li>Agile and Scrum methodologies</li>
+                            <li>Real-time team collaboration</li>
+                            <li>Advanced reporting and analytics</li>
+                            <li>Integration with popular tools</li>
+                            <li>Mobile app support</li>
+                        </ul>
+                        <div class="product-actions">
+                            <a href="#" class="btn btn-primary">View Documentation</a>
+                            <a href="#" class="btn btn-secondary">Download</a>
+                        </div>
+                    </div>
+
+                    <div class="product-card" id="product-2">
+                        <div class="product-header">
+                            <div class="product-icon">
+                                <i class="fas fa-code"></i>
+                            </div>
+                            <div>
+                                <h3 class="product-title">Code Editor Plus</h3>
+                                <span class="product-version">v1.8.3</span>
+                            </div>
+                        </div>
+                        <p class="product-description">
+                            Feature-rich code editor with syntax highlighting, debugging tools, and extensive plugin ecosystem.
+                        </p>
+                        <ul class="product-features">
+                            <li>Multi-language support</li>
+                            <li>Intelligent code completion</li>
+                            <li>Integrated debugging</li>
+                            <li>Git integration</li>
+                            <li>Customizable themes</li>
+                        </ul>
+                        <div class="product-actions">
+                            <a href="#" class="btn btn-primary">View Documentation</a>
+                            <a href="#" class="btn btn-secondary">Download</a>
+                        </div>
+                    </div>
+
+                    <div class="product-card" id="product-3">
+                        <div class="product-header">
+                            <div class="product-icon">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <div>
+                                <h3 class="product-title">Database Manager</h3>
+                                <span class="product-version">v3.0.1</span>
+                            </div>
+                        </div>
+                        <p class="product-description">
+                            Comprehensive database management solution supporting multiple database types with advanced query tools.
+                        </p>
+                        <ul class="product-features">
+                            <li>Multi-database support</li>
+                            <li>Visual query builder</li>
+                            <li>Performance monitoring</li>
+                            <li>Backup and recovery</li>
+                            <li>Security management</li>
+                        </ul>
+                        <div class="product-actions">
+                            <a href="#" class="btn btn-primary">View Documentation</a>
+                            <a href="#" class="btn btn-secondary">Download</a>
+                        </div>
+                    </div>
+
+                    <div class="product-card" id="product-4">
+                        <div class="product-header">
+                            <div class="product-icon">
+                                <i class="fas fa-network-wired"></i>
+                            </div>
+                            <div>
+                                <h3 class="product-title">API Gateway</h3>
+                                <span class="product-version">v2.5.2</span>
+                            </div>
+                        </div>
+                        <p class="product-description">
+                            High-performance API gateway with load balancing, authentication, and monitoring capabilities.
+                        </p>
+                        <ul class="product-features">
+                            <li>Load balancing</li>
+                            <li>Rate limiting</li>
+                            <li>Authentication & authorization</li>
+                            <li>API versioning</li>
+                            <li>Real-time monitoring</li>
+                        </ul>
+                        <div class="product-actions">
+                            <a href="#" class="btn btn-primary">View Documentation</a>
+                            <a href="#" class="btn btn-secondary">Download</a>
+                        </div>
+                    </div>
+
+                    <div class="product-card" id="product-5">
+                        <div class="product-header">
+                            <div class="product-icon">
+                                <i class="fas fa-vial"></i>
+                            </div>
+                            <div>
+                                <h3 class="product-title">Testing Suite</h3>
+                                <span class="product-version">v1.9.0</span>
+                            </div>
+                        </div>
+                        <p class="product-description">
+                            Comprehensive testing framework supporting unit, integration, and end-to-end testing.
+                        </p>
+                        <ul class="product-features">
+                            <li>Unit testing framework</li>
+                            <li>Integration testing</li>
+                            <li>E2E testing automation</li>
+                            <li>Test reporting</li>
+                            <li>CI/CD integration</li>
+                        </ul>
+                        <div class="product-actions">
+                            <a href="#" class="btn btn-primary">View Documentation</a>
+                            <a href="#" class="btn btn-secondary">Download</a>
+                        </div>
+                    </div>
+
+                    <div class="product-card" id="product-6">
+                        <div class="product-header">
+                            <div class="product-icon">
+                                <i class="fas fa-rocket"></i>
+                            </div>
+                            <div>
+                                <h3 class="product-title">Deployment Tool</h3>
+                                <span class="product-version">v2.2.1</span>
+                            </div>
+                        </div>
+                        <p class="product-description">
+                            Automated deployment solution with rollback capabilities and environment management.
+                        </p>
+                        <ul class="product-features">
+                            <li>Automated deployments</li>
+                            <li>Rollback functionality</li>
+                            <li>Environment management</li>
+                            <li>Health monitoring</li>
+                            <li>Blue-green deployments</li>
+                        </ul>
+                        <div class="product-actions">
+                            <a href="#" class="btn btn-primary">View Documentation</a>
+                            <a href="#" class="btn btn-secondary">Download</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>Knowledge Base</h4>
+                    <p>Your trusted source for corporate knowledge and product information.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Quick Links</h4>
+                    <ul>
+                        <li><a href="../index.html">Home</a></li>
+                        <li><a href="#search">Search</a></li>
+                        <li><a href="#about">About</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Contact</h4>
+                    <p>For questions or support, contact your IT department.</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 Corporate Knowledge Base. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../script.js"></script>
+    <script>
+        // Smooth scrolling for product navigation
+        document.addEventListener('DOMContentLoaded', function() {
+            const productNavBtns = document.querySelectorAll('.product-nav-btn');
+            
+            productNavBtns.forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href').substring(1);
+                    const targetElement = document.getElementById(targetId);
+                    
+                    if (targetElement) {
+                        targetElement.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html> 

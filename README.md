@@ -203,3 +203,116 @@ To ensure efficient operation:
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+# Corporate Knowledge Base
+
+A modern, responsive corporate knowledge base website designed for employees to easily find product information and documentation.
+
+## Features
+
+- **Modern Design**: Clean, professional interface with gradient backgrounds and smooth animations
+- **Responsive Layout**: Works perfectly on desktop, tablet, and mobile devices
+- **Product Categories**: Organized product categories with visual icons and descriptions
+- **Product Cards**: Detailed product information with features, versions, and action buttons
+- **Anchor Navigation**: Quick navigation buttons at the top of product pages
+- **Search Functionality**: Built-in search capability (can be extended with backend integration)
+- **Smooth Animations**: CSS transitions and JavaScript animations for better user experience
+
+## Structure
+
+```
+├── index.html              # Main homepage with category buttons
+├── styles.css              # Main stylesheet with responsive design
+├── script.js               # JavaScript for interactivity
+└── products/               # Product category pages
+    ├── software.html       # Software products page (example)
+    ├── hardware.html       # Hardware products page (to be created)
+    ├── services.html       # Services page (to be created)
+    ├── cloud.html          # Cloud solutions page (to be created)
+    ├── security.html       # Security products page (to be created)
+    └── analytics.html      # Analytics products page (to be created)
+```
+
+## GitHub Pages Setup
+
+### Option 1: Automatic Setup (Recommended)
+
+1. **Push to GitHub**: Push this repository to your GitHub account
+2. **Enable GitHub Pages**:
+   - Go to your repository on GitHub
+   - Click on "Settings" tab
+   - Scroll down to "Pages" section
+   - Under "Source", select "Deploy from a branch"
+   - Choose "main" branch and "/ (root)" folder
+   - Click "Save"
+
+3. **Access Your Site**: Your knowledge base will be available at:
+   `https://yourusername.github.io/your-repo-name/`
+
+### Option 2: Manual Setup
+
+1. **Create a new repository** on GitHub
+2. **Clone the repository** to your local machine
+3. **Copy all files** from this project to the repository
+4. **Commit and push** the changes
+5. **Follow the automatic setup steps** above
+
+## Customization
+
+### Adding New Product Categories
+
+1. Create a new HTML file in the `products/` directory (e.g., `hardware.html`)
+2. Copy the structure from `software.html`
+3. Update the product cards with your specific products
+4. Add the category link to `index.html`
+
+### Modifying Styles
+
+- Edit `styles.css` to change colors, fonts, and layout
+- The design uses CSS custom properties for easy theming
+- All components are responsive and mobile-friendly
+
+### Adding Search Functionality
+
+The current search shows an alert. To implement real search:
+
+1. **Client-side search**: Add JavaScript to filter product cards
+2. **Backend search**: Integrate with a search API or database
+3. **External search**: Use services like Algolia or Elasticsearch
+
+## Browser Support
+
+- Chrome 60+
+- Firefox 55+
+- Safari 12+
+- Edge 79+
+
+## Performance
+
+- Optimized images and icons using Font Awesome CDN
+- Minified CSS and JavaScript (recommended for production)
+- Lazy loading for better performance
+- Responsive images and efficient CSS Grid layouts
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test on different devices and browsers
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+
+For questions or support:
+- Create an issue in the GitHub repository
+- Contact your IT department for internal support
+- Check the documentation in the knowledge base itself
+
+---
+
+**Note**: This is a static website template. For dynamic features like user authentication, real-time search, or content management, you'll need to integrate with a backend service or CMS.
